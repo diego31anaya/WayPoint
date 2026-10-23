@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ChatWidget from './components/ChatWidget'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import './App.css'
 
@@ -98,11 +99,17 @@ function App() {
   }
 
   if (activeSearch) {
-    return <NeighborhoodScreen search={activeSearch} onBack={() => setActiveSearch(null)} />
+    return (
+      <>
+        <NeighborhoodScreen search={activeSearch} onBack={() => setActiveSearch(null)} />
+        <ChatWidget />
+      </>
+    )
   }
 
   return (
-    <main>
+    <>
+      <main>
       <header className="site-header page-shell">
         <a className="brand" href="#home" aria-label="WayPoint home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
@@ -216,7 +223,9 @@ function App() {
         <span>Built for the businesses that make a neighborhood.</span>
         <a href="#home" className="back-top">Back to top ↑</a>
       </footer>
-    </main>
+      </main>
+      <ChatWidget />
+    </>
   )
 }
 
