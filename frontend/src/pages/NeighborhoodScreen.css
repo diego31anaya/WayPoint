@@ -1,4 +1,5 @@
 .neighborhood-screen { min-height: 100vh; background: #fbfaf6; }
+.map-header-actions { display: flex; align-items: center; gap: 10px; }
 .back-home { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #d8d8ce; border-radius: 3px; padding: 10px 13px; background: transparent; color: var(--green); font: 650 11px var(--sans); cursor: pointer; }
 .back-home:hover { border-color: var(--green); background: #edf1e9; }
 .neighborhood-content { padding-block: 53px 70px; }
@@ -35,6 +36,8 @@
   .neighborhood-content { padding-block: 40px 52px; }
   .neighborhood-map-toolbar { padding-inline: 14px; }
   .neighborhood-map-stage { height: 55vh; min-height: 330px; }
+  .map-header-actions { gap: 6px; }
+  .back-home { gap: 5px; padding: 9px 8px; font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

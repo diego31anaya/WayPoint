@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import AccountControl from '../components/AccountControl'
 import { fetchZipBoundary } from '../services/zipBoundary'
 import './NeighborhoodScreen.css'
 
@@ -106,7 +107,7 @@ function NeighborhoodMap({ zipCode, radiusMiles }) {
   )
 }
 
-function NeighborhoodScreen({ search, onBack }) {
+function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard }) {
   return (
     <main className="neighborhood-screen">
       <header className="site-header page-shell">
@@ -122,9 +123,16 @@ function NeighborhoodScreen({ search, onBack }) {
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
           <span>WayPoint</span>
         </a>
-        <button className="back-home" type="button" onClick={onBack}>
-          ← <span>Edit search</span>
-        </button>
+        <div className="map-header-actions">
+          <button className="back-home" type="button" onClick={onBack}>
+            ← <span>Edit search</span>
+          </button>
+          <AccountControl
+            user={user}
+            onCreateAccount={onCreateAccount}
+            onOpenDashboard={onOpenDashboard}
+          />
+        </div>
       </header>
       <section className="neighborhood-content page-shell">
         <div className="neighborhood-heading">

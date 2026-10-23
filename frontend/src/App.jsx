@@ -1,5 +1,8 @@
 import { useState } from 'react'
+import AccountControl from './components/AccountControl'
 import ChatWidget from './components/ChatWidget'
+import AccountPage from './pages/AccountPage'
+import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import './App.css'
 
@@ -75,6 +78,14 @@ function App() {
   const [radius, setRadius] = useState('3')
   const [message, setMessage] = useState('')
   const [activeSearch, setActiveSearch] = useState(null)
+  const [currentPage, setCurrentPage] = useState('home')
+  const [returnPage, setReturnPage] = useState('home')
+  const [currentUser, setCurrentUser] = useState(null)
+
+  function handleCreateAccount() {
+    setReturnPage(currentPage)
+    setCurrentPage('account')
+  }
 
   function handleSubmit(event) {
     event.preventDefault()
@@ -96,12 +107,52 @@ function App() {
       zipCode,
       radiusMiles: Number(radius),
     })
+    setCurrentPage('neighborhood')
   }
 
-  if (activeSearch) {
+  if (currentPage === 'account') {
     return (
       <>
-        <NeighborhoodScreen search={activeSearch} onBack={() => setActiveSearch(null)} />
+        <AccountPage
+          onAccountCreated={(user) => {
+            setCurrentUser(user)
+            setCurrentPage('dashboard')
+          }}
+          onBack={() => setCurrentPage(returnPage)}
+        />
+        <ChatWidget />
+      </>
+    )
+  }
+
+  if (currentPage === 'dashboard') {
+    return (
+      <>
+        <DashboardPage
+          user={currentUser}
+          activeSearch={activeSearch}
+          onExplore={() => setCurrentPage('home')}
+          onViewMap={() => setCurrentPage('neighborhood')}
+          onSignOut={() => {
+            setCurrentUser(null)
+            setCurrentPage('home')
+          }}
+        />
+        <ChatWidget />
+      </>
+    )
+  }
+
+  if (currentPage === 'neighborhood' && activeSearch) {
+    return (
+      <>
+        <NeighborhoodScreen
+          search={activeSearch}
+          user={currentUser}
+          onBack={() => setCurrentPage('home')}
+          onCreateAccount={handleCreateAccount}
+          onOpenDashboard={() => setCurrentPage('dashboard')}
+        />
         <ChatWidget />
       </>
     )
@@ -119,7 +170,11 @@ function App() {
           <a href="#how-it-works">How it works</a>
           <a href="#insights">What you’ll see</a>
         </nav>
-        <a className="header-cta" href="#get-started">Explore your neighborhood <span>↗</span></a>
+        <AccountControl
+          user={currentUser}
+          onCreateAccount={handleCreateAccount}
+          onOpenDashboard={() => setCurrentPage('dashboard')}
+        />
       </header>
 
       <section className="hero page-shell" id="home">
