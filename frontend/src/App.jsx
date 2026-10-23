@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AccountControl from './components/AccountControl'
 import ChatWidget from './components/ChatWidget'
 import AccountPage from './pages/AccountPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
+import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
 import './App.css'
 
-const recommendations = [
+// Home page example: Pomona, next to Cal Poly Pomona.
+const FEATURED_ZIP = '91768'
+const FEATURED_CATEGORY = 'cafe'
+
+// Shown until the real brief for FEATURED_ZIP loads.
+const fallbackRecommendations = [
   {
     number: '01',
     tag: 'NEARBY WORKPLACES',
@@ -33,13 +39,13 @@ const recommendations = [
   },
 ]
 
-function NeighborhoodIllustration() {
+function NeighborhoodIllustration({ zipCode }) {
   return (
     <div className="map-card" aria-label="Illustrative neighborhood map">
       <div className="map-topline">
         <span className="live-dot" />
         <span>NEIGHBORHOOD SNAPSHOT</span>
-        <span className="map-zip">94612</span>
+        <span className="map-zip">{zipCode}</span>
       </div>
       <div className="map-art" aria-hidden="true">
         <svg viewBox="0 0 540 340" role="presentation">
@@ -54,9 +60,9 @@ function NeighborhoodIllustration() {
           <path className="road road-secondary" d="M371-11c-14 69-11 108 7 159s26 117 11 205" />
           <path className="route" d="M114 263c35-57 68-77 111-87 35-8 65 1 102-26s55-54 87-73" />
         </svg>
-        <span className="map-label label-park">WATERFRONT PARK</span>
-        <span className="map-label label-market">MARKET ST</span>
-        <span className="map-label label-campus">CIVIC CENTER</span>
+        <span className="map-label label-park">BONELLI PARK</span>
+        <span className="map-label label-market">TEMPLE AVE</span>
+        <span className="map-label label-campus">CAL POLY POMONA</span>
         <span className="pin pin-one"><i>☕</i></span>
         <span className="pin pin-two"><i>☕</i></span>
         <span className="pin pin-three"><i>⌂</i></span>
@@ -81,6 +87,16 @@ function App() {
   const [currentPage, setCurrentPage] = useState('home')
   const [returnPage, setReturnPage] = useState('home')
   const [currentUser, setCurrentUser] = useState(null)
+  const [brief, setBrief] = useState(null)
+
+  useEffect(() => {
+    Promise.all([fetchZipData(FEATURED_ZIP), fetchDataIndex()])
+      .then(([zipData, index]) => {
+        if (zipData) setBrief({ zip: zipData.zip, ideas: buildBrief(zipData, index, FEATURED_CATEGORY) })
+      })
+      .catch(() => {})  // keep the fallback cards
+  }, [])
+  const recommendations = brief?.ideas ?? fallbackRecommendations
 
   function handleCreateAccount() {
     setReturnPage(currentPage)
@@ -220,7 +236,7 @@ function App() {
         <div className="hero-visual">
           <div className="visual-spark spark-one">✳</div>
           <div className="visual-spark spark-two">✳</div>
-          <NeighborhoodIllustration />
+          <NeighborhoodIllustration zipCode={FEATURED_ZIP} />
           <div className="floating-note">
             <span className="note-icon">↗</span>
             <span><strong>See the bigger picture</strong><small>Local places · Census context · Patterns</small></span>
@@ -250,8 +266,8 @@ function App() {
         </div>
         <div className="insights-layout">
           <div className="insight-panel">
-            <div className="panel-header"><span>AN EXAMPLE NEIGHBORHOOD BRIEF</span><span className="sample-pill">ILLUSTRATIVE</span></div>
-            <div className="brief-title"><span className="brief-icon">☕</span><span><strong>Independent coffee shop</strong><small>Example opportunities to investigate</small></span></div>
+            <div className="panel-header"><span>AN EXAMPLE NEIGHBORHOOD BRIEF</span><span className="sample-pill">{brief ? `REAL DATA · ${brief.zip}` : 'ILLUSTRATIVE'}</span></div>
+            <div className="brief-title"><span className="brief-icon">☕</span><span><strong>Independent coffee shop</strong><small>{brief ? `Pomona, ${brief.zip} · within 2 miles` : 'Example opportunities to investigate'}</small></span></div>
             <div className="recommendation-list">
               {recommendations.map((item) => (
                 <article className="recommendation" key={item.number}>
@@ -261,7 +277,7 @@ function App() {
                 </article>
               ))}
             </div>
-            <p className="panel-footnote">Ideas are starting points based on available neighborhood indicators—not predictions of customer demand or sales.</p>
+            <p className="panel-footnote">Ideas are starting points based on available neighborhood indicators—not predictions of customer demand or sales.{brief && ' Sources: Overture Maps, SafeGraph Open Census.'}</p>
           </div>
           <aside className="how-card" id="how-it-works">
             <span className="how-number">01 — 03</span>
