@@ -29,11 +29,52 @@
 .map-data-attribution { position: absolute; left: 10px; bottom: 10px; z-index: 500; padding: 5px 8px; border: 1px solid #e6e8df; border-radius: 2px; background: #fbfcf8e8; color: #72786e; font-size: 8px; pointer-events: none; }
 .map-data-attribution-outside { position: static; display: block; text-align: right; padding: 7px 10px; border: 0; border-top: 1px solid #e9e9e1; border-radius: 0; font-size: 8px; }
 .map-screen-footnote { margin: 13px 0 0; color: #858a80; font-size: 9px; line-height: 1.6; }
+.map-pin-legend { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 6px 9px; border: 1px solid #e6e8df; border-radius: 2px; background: #fbfcf8ee; color: #5e665c; font-size: 9px; pointer-events: none; }
+.map-pin-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pin-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.pin-independent { background: var(--green); }
+.pin-chain { background: var(--orange); }
+.pin-other { width: 6px; height: 6px; background: #7d8377; }
+.place-popup strong, .place-popup span { display: block; }
+.place-popup strong { color: var(--ink); font: 650 12px var(--sans); }
+.place-popup span { margin-top: 3px; color: #6f756b; font: 10px var(--sans); }
+
+.neighborhood-insights { margin-top: 38px; }
+.insights-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 17px; }
+.insights-kicker { color: #898c82; font-size: 8px; letter-spacing: 1.2px; font-weight: 750; }
+.insights-heading h2 { margin-top: 8px; font-size: clamp(26px, 3vw, 34px); }
+.insights-heading h2 em { color: var(--green); font-style: italic; }
+.insights-heading > p { margin: 0; color: #7a7e74; font-size: 11px; }
+.insight-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.insight-stat, .insight-list { display: flex; flex-direction: column; gap: 6px; border: 1px solid #e3e3da; border-radius: 5px; padding: 18px; background: #fffefa; box-shadow: 0 12px 35px #28392b0a; }
+.insight-stat-label { color: #898c82; font-size: 8px; letter-spacing: 1px; font-weight: 750; }
+.insight-stat strong { margin-top: 4px; color: var(--green); font: 500 30px/1.05 var(--serif); letter-spacing: -.6px; }
+.insight-stat-line { color: var(--ink); font-size: 11px; line-height: 1.4; }
+.insight-stat small { color: #7a7e74; font-size: 10px; line-height: 1.5; }
+.insight-lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.insight-list ol { margin: 4px 0 0; padding-left: 18px; color: var(--ink); font-size: 11px; line-height: 1.5; }
+.insight-list li + li { margin-top: 5px; }
+.insight-list li small { display: block; color: #898c82; font-size: 9px; }
+.insight-list p { margin: 4px 0 0; color: #7a7e74; font-size: 11px; line-height: 1.5; }
+.insight-list .insight-list-note { margin-top: auto; padding-top: 8px; border-top: 1px solid #efefe7; font-size: 10px; }
+.insights-finding { margin: 14px 0 0; padding: 13px 16px; border-left: 3px solid var(--orange); border-radius: 2px; background: #f6f2ea; color: var(--ink-soft); font-size: 11px; line-height: 1.6; }
+.insights-finding strong { color: var(--ink); }
+.insights-status { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 38px; padding: 34px 24px; border: 1px dashed #d8d8ce; border-radius: 5px; text-align: center; color: #858a80; }
+.insights-status strong { color: #455444; font-size: 13px; }
+.insights-status > span:not(.map-loader) { max-width: 430px; font-size: 10px; line-height: 1.6; }
 
 @keyframes map-spin { to { transform: rotate(360deg); } }
 
+@media (max-width: 960px) {
+  .insight-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insight-lists { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 680px) {
   .neighborhood-content { padding-block: 40px 52px; }
+  .insights-heading { flex-direction: column; align-items: flex-start; }
+  .insight-stats { grid-template-columns: 1fr; }
+  .map-pin-legend { left: 10px; right: 10px; }
   .neighborhood-map-toolbar { padding-inline: 14px; }
   .neighborhood-map-stage { height: 55vh; min-height: 330px; }
   .map-header-actions { gap: 6px; }
