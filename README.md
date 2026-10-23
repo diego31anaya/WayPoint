@@ -15,7 +15,7 @@ Find independent local businesses ("hidden gems") near you, plus owner-view numb
 pip install -r requirements.txt
 cp .env.example .env   # fill in Snowflake credentials; .env is gitignored
 ```
-With no credentials, everything runs off `data/sample_places.csv`: 1,651 places within 5 km of Cal Poly Pomona, pulled with `data/sql/extract.sql` on 2026-10-23. Live query results are cached in `data/cache/`, so the demo doesn't need Snowflake once an area has been fetched.
+With no credentials, everything runs off `data/la_places.csv.gz`: 342,543 LA-area places (open with confidence > 0.7, plus all permanently closed ones) with their ZIP, built in Snowflake with CoCo (`WAYPOINT.PUBLIC.LA_PLACES`) on 2026-10-23. `data/la_cbg.csv` holds the area's 7,883 census block groups. The older CPP-only `data/sample_places.csv` is the fallback. Live query results are cached in `data/cache/`, so the demo doesn't need Snowflake once an area has been fetched.
 
 ### Python API
 ```python
@@ -34,14 +34,21 @@ get_places(34.0575, -117.8216, 2000, category="cafe")
 | is_independent | bool | True if not a chain |
 | hidden_gem_score | float 0–1 | Proxy score, not measured demand |
 
-Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon, radius_m)`, `gap_score(category, lat, lon, radius_m, city_radius_m=5000)`, `survival(category, lat, lon, radius_m)`. All return plain counts and ratios.
+Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon, radius_m)`, `gap_score(category, lat, lon, radius_m, city_radius_m=10000)`, `survival(category, lat, lon, radius_m)`. All return plain counts and ratios.
 
 ### Frontend data
-`python3 -m data.export` writes two static files the React app can `fetch()` (no server needed):
-- `frontend/public/data/places.json`: the 883 places (contract columns) plus 43 permanently closed ones, with metadata (center, 5 km coverage, sources, score weights)
-- `frontend/public/data/insights.json`: owner numbers around CPP for each category at 1, 2 and 3 miles (competitors, nearest names, `gap_score`, `survival`), the 2-mile category mix, and the LA County findings
+`python3 -m data.export` (about 4 minutes) writes static JSON the React app can `fetch()`, with no server needed:
+- `frontend/public/data/index.json`: the 342 covered ZIPs (each with a center and place count), sources, score weights, LA County findings, and California survival rates by category
+- `frontend/public/data/zip/<zip>.json`, one per ZIP:
+  - `center`: median location of the ZIP's places; all radius numbers are measured from here
+  - `places`: the businesses in that ZIP (contract columns), ready for map pins
+  - `categories.<cafe|restaurant|retail|services>.<1|2|3>` (miles): competitors, independents, 5 nearest names, density vs. the 10 km area, `gap_score`, open/closed counts, `closure_rate`
+  - `category_mix_1mi`, and `demographics` for block groups within 2 miles (population, population-weighted median income and age)
 
-In the app: `const data = await fetch('/data/places.json').then(r => r.json())`. Data only covers 5 km around CPP (ZIPs 91768, 91789, 91765).
+```js
+const zip = await fetch(`/data/zip/${zipCode}.json`).then(r => r.ok ? r.json() : null)  // null = ZIP not covered
+```
+Coverage: ZIPs with 50+ businesses in the box lon −118.95 to −117.65, lat 33.70 to 34.82 (LA County plus parts of Orange, Ventura and San Bernardino). ZIPs at the box's edge have partial radius counts.
 
 ### How the numbers are made
 - **Filtered to** places with Overture confidence > 0.7, then mapped from Overture's `TAXONOMY` to four friendly categories (`data/categories.py`):

@@ -4,6 +4,7 @@ Pulls Overture Places from Snowflake, caches each area to data/cache/, and falls
 back to data/sample_places.csv when no Snowflake credentials are set.
 """
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ from .categories import friendly_category
 HERE = Path(__file__).parent
 CACHE = HERE / "cache"
 SAMPLE = HERE / "sample_places.csv"
+REGION = HERE / "la_places.csv.gz"  # LA area incl. closed places, from WAYPOINT.PUBLIC.LA_PLACES; preferred over SAMPLE
 CHAINS = HERE / "ca_chains.csv"  # from WAYPOINT.PUBLIC.CA_CHAINS, built with CoCo
 TABLE = os.environ.get("PLACES_TABLE", "OVERTURE_MAPS_PLACES.CARTO.PLACE")
 MIN_CONFIDENCE = 0.7  # a guess; tune after looking at the pins
@@ -97,12 +99,22 @@ def fetch_raw(lat, lon, radius_m):
         CACHE.mkdir(exist_ok=True)
         df.to_csv(path, index=False)
         return df
-    if not SAMPLE.exists():
-        raise RuntimeError("No Snowflake credentials in env/.env and no data/sample_places.csv")
-    df = pd.read_csv(SAMPLE)
-    df.columns = df.columns.str.lower()  # Snowflake exports UPPERCASE headers
-    return df[haversine_m(lat, lon, df.lat, df.lon) <= radius_m].reset_index(drop=True)
+    df = offline_rows()
+    df = df[haversine_m(lat, lon, df.lat, df.lon) <= radius_m]
+    if "operating_status" in df:  # the region file also holds closed / low-confidence rows for survival()
+        df = df[(df.operating_status != "permanently_closed") & (df.confidence > MIN_CONFIDENCE)]
+    return df.reset_index(drop=True)
 
+
+@lru_cache(maxsize=None)
+def offline_rows():
+    """The local extract: the LA region file if present, else the CPP sample."""
+    path = REGION if REGION.exists() else SAMPLE
+    if not path.exists():
+        raise RuntimeError("No Snowflake credentials in env/.env and no local extract in data/")
+    df = pd.read_csv(path, dtype={"ZIP": str})
+    df.columns = df.columns.str.lower()  # Snowflake exports UPPERCASE headers
+    return df
 
 def name_key(col):
     return col.str.lower().str.replace(r"[^a-z0-9]", "", regex=True)

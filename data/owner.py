@@ -4,9 +4,10 @@ import math
 import pandas as pd
 
 from .categories import friendly_category
+from . import db
 from .db import HERE, clean, fetch_raw, get_places, haversine_m
 
-CITY_RADIUS_M = 5_000  # matches the sample extract; raise when querying live
+CITY_RADIUS_M = 10_000
 
 
 def competitors(category, lat, lon, radius_m=1000):
@@ -57,21 +58,25 @@ def _read(name):
     return df
 
 
+def is_category(df, category):
+    # A Series, not a list: an empty list would select zero columns instead of zero rows.
+    return pd.Series([friendly_category(t, s, p) == category for t, s, p in
+                      zip(df.top_category, df.sub_category, df.category)], index=df.index, dtype=bool)
+
+
 def survival(category, lat, lon, radius_m=2000):
     """Open vs. permanently closed counts for a friendly category, locally and across CA.
 
     Success proxy = survival. Overture only marks some closures, so rates run low.
     """
-    local = _read("pomona_status.csv")
+    local = db.offline_rows() if db.REGION.exists() else _read("pomona_status.csv")
     local = local[haversine_m(lat, lon, local.lat, local.lon) <= radius_m]
-    local = local[[friendly_category(t, s, p) == category for t, s, p in
-                   zip(local.top_category, local.sub_category, local.category)]]
+    local = local[is_category(local, category)]
     open_n = int((local.operating_status == "open").sum())
     closed = local[local.operating_status == "permanently_closed"]
 
     ca = _read("category_survival.csv")
-    ca = ca[[friendly_category(t, s, p) == category for t, s, p in
-             zip(ca.top_category, ca.sub_category, ca.category)]]
+    ca = ca[is_category(ca, category)]
     rated = ca[(ca.open_n + ca.closed_n >= MIN_CATEGORY_PLACES) & (ca.closed_n > 0)  # 0 = source never marks closures
                & (ca.category != ca.top_category) & (ca.category != ca.sub_category)  # skip generic labels
                & (ca.category != category)]
