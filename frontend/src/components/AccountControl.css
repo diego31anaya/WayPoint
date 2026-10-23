@@ -1,0 +1,9 @@
+.create-account-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 1px solid var(--green); border-radius: 3px; background: var(--green); color: #fff; font: 650 10px var(--sans); white-space: nowrap; cursor: pointer; transition: background .18s, border .18s; }
+.create-account-button:hover { border-color: #294a38; background: #294a38; }
+.create-account-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.account-avatar { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 1px solid #d8dfd2; border-radius: 50%; background: #eaf0e6; color: var(--green); font: 750 11px var(--sans); cursor: pointer; }
+.account-avatar:hover { border-color: var(--green); background: #dfe9d9; }
+
+@media (max-width: 480px) {
+  .create-account-button { min-height: 35px; padding-inline: 9px; font-size: 9px; }
+}
