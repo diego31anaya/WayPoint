@@ -100,7 +100,7 @@ def test_transient_retry(analysis_request):
 @pytest.mark.parametrize('models,expected', [(['qwen3:1.7b'], 'available'), ([], 'model_missing')])
 def test_model_probe(models, expected):
     service = AIService(Settings(_env_file=None, ai_enabled=True), httpx.MockTransport(
-        lambda req: httpx.Response(200, json={'models': [{'name': m} for m in models]})))
+        lambda req: httpx.Response(200, json={'models': [{'model': m} for m in models]})))
     assert service.check_availability() == expected
 
 

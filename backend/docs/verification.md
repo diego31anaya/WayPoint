@@ -1,5 +1,16 @@
 # Verification record — 2026-10-23
 
+## Official Ollama client integration (latest)
+
+- Migrated generation and availability calls to `ollama.Client` (installed version 0.6.3), retaining existing schemas, scoring, evidence validation, cache, fallbacks and API response fields.
+- Local Ollama became available after the earlier audit. The official client listed `qwen3:1.7b`; server version reported `0.40.10`.
+- Initial real outputs were correctly rejected for invalid citations or numerical prose. These failures returned explicitly labeled deterministic fallback and were not counted as successful inference verification.
+- Tightened the generation schema with actual evidence field enums and plain English prose constraints, included the schema in the prompt, and retained independent cross-field validation.
+- `.venv/Scripts/python.exe -m scripts.check_ollama --timeout 120` subsequently exited **0** with **three real model recommendations**, source **open_weight_model**, and all evidence checks passing. Reported generation/validation time: **5.38 seconds** on that warm run.
+- Inputs were explicitly synthetic Pomona records with an illustrative owner profile, not real Snowflake observations. Actual Snowflake connectivity remains unverified.
+- `.env` was neither edited nor committed; `.gitignore` continues to ignore it. No frontend files were changed.
+- Final automated suite after integration: **70 passed**; `pip check` reported no broken requirements, and `git diff --check` found no whitespace errors. Official-client configuration, timeout/connection errors, malformed typed responses, generation-schema constraints, evidence checks, retries, caching and the existing endpoint integration are covered without requiring a model for the unit suite.
+
 ## Backend completion audit
 
 - Baseline before changes: **30 tests passed**.

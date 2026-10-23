@@ -29,8 +29,8 @@ def analyze(request: AnalysisRequest, data=Depends(get_data_service), ai=Depends
     registry = {e.metric_id: e for e in evidence}
     for score in scores:
         score.contributing_metrics = [registry[key] for key in score.evidence_ids]
-    recommendations, source, warnings = ai.generate_recommendations(request, {'metrics': metrics, 'evidence': evidence, 'scores': scores,
-                                                                            'neighborhood': summary})
+    recommendations, source, warnings = ai.generate_recommendations(request, {'metrics': metrics, 'evidence': evidence,
+                                                                            'neighborhood': summary}, scores)
     warnings += ['Place coverage and category completeness are unknown. Ownership is unknown. Scores are unvalidated heuristics.']
     if settings.data_mode == 'mock':
         warnings.append('SIMULATED: fixed synthetic Pomona records; not actual Overture observations.')

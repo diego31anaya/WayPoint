@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     ollama_model: str = 'qwen3:1.7b'
     ollama_timeout_s: float = Field(default=45, gt=0, le=180)
     ollama_retries: int = Field(default=1, ge=0, le=2)
+    ollama_temperature: float = Field(default=0, ge=0, le=2)
+    ollama_think: bool = False
     cors_origins: list[str] = ['http://localhost:5173', 'http://127.0.0.1:5173']
     snowflake_account: str = ''
     snowflake_user: str = ''
