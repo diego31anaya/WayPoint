@@ -27,7 +27,7 @@ function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut }) 
             <span className="account-kicker">YOUR NEXT STEP</span>
             <h2>Start with the area around your business.</h2>
             <p>Explore a ZIP code to see its mapped area and, as WayPoint grows, neighborhood insights tailored to your business.</p>
-            <button type="button" onClick={onExplore}>Explore a neighborhood <span>→</span></button>
+            <button type="button" onClick={onExplore}>Explore my area <span>→</span></button>
           </div>
           <div className="dashboard-card-art" aria-hidden="true"><span className="dashboard-art-ring ring-a" /><span className="dashboard-art-ring ring-b" /><span className="dashboard-art-center">W</span><i className="dashboard-art-dot dot-a" /><i className="dashboard-art-dot dot-b" /></div>
         </div>

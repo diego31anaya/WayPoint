@@ -131,7 +131,7 @@ function App() {
         <DashboardPage
           user={currentUser}
           activeSearch={activeSearch}
-          onExplore={() => setCurrentPage('home')}
+          onExplore={() => setCurrentPage(activeSearch ? 'neighborhood' : 'home')}
           onViewMap={() => setCurrentPage('neighborhood')}
           onSignOut={() => {
             setCurrentUser(null)
