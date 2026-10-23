@@ -1,110 +1,146 @@
 # BlockBoost backend
 
-BlockBoost helps small-business owners turn mapped neighborhood businesses into experiments they can measure. It returns competitor density, complementary-category presence, transparent opportunity signals, and three evidence-cited strategies. It does not predict demand or profitability.
+BlockBoost turns mapped neighborhood businesses into evidence-grounded experiments for small-business owners. Snowflake supplies spatial analytics; a deterministic heuristic scores opportunity signals; Snowflake Cortex AI explains them and recommends strategies. A saved Cortex Agent with Cortex Analyst supports location comparisons over curated analytical data.
 
-## Run locally
+**Status:** mock analysis works without credentials. Automated Snowflake/Cortex/Agent/H3 tests are mocked. Live `AI_COMPLETE`, live saved Agent calls, H3 SQL execution, installed dataset schema and genuine CoCo evidence remain unverified until the team supplies account access and artifacts. The configured model is `llama3.3-70b`; no Snowflake model has actually run in this environment.
 
-Python 3.11+ (development verified on Python 3.13). From this backend folder in PowerShell:
+## Start and test
+
+Python 3.11+; development tested on Windows/Python 3.13. From `backend`:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
+# If no .env exists, copy the template. Never overwrite existing credentials.
+if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Defaults work without credentials: `DATA_MODE=mock`, `AI_ENABLED=false`. Mock mode uses explicitly synthetic fixed Pomona records. Try latitude `34.0551`, longitude `-117.7499`, radius `1500`. Other cities may correctly return no demo records. API docs: http://127.0.0.1:8000/docs. Avoid exposing this unauthenticated MVP to the public Internet.
+Defaults: `DATA_MODE=mock`, `AI_ENABLED=false`, `AI_PROVIDER=snowflake_cortex`. These return explicitly simulated Pomona records and labeled deterministic fallback recommendations. No local model server/download or proprietary external AI API is used. Live data errors never substitute mock records. `.env` and its variants are ignored; `.env.example` contains placeholders only.
 
 ```powershell
-$body = @{business_type='coffee_shop'; location=@{latitude=34.0551; longitude=-117.7499}; radius_m=1500; business_goal='Attract more customers'} | ConvertTo-Json
-Invoke-RestMethod http://127.0.0.1:8000/api/analyze -Method Post -ContentType application/json -Body $body
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-## API contract for C (Streamlit)
+Open http://127.0.0.1:8000/docs for executable API documentation and `/openapi.json` for the authoritative schema. The existing frontend was not changed. Backend CORS defaults to local Vite origins; server-side Streamlit HTTP calls also work. This trusted-local-demo MVP has no authentication or tenant isolation. Use account row-access controls and deployment authentication before serving multiple owners or exposing it publicly.
 
-`GET /api/health` is a cheap configuration/liveness check. Opt in with `?check_dependencies=true` to check the configured Snowflake view and Ollama's installed model list. An available Ollama model does not prove successful generation. `configured_not_probed` never means a connection succeeded. `GET /api/categories` returns provisional dataset mappings and supported goal suggestions; A must validate category coverage. `POST /api/analyze` accepts the request above plus optional business information described below. Radius is 100–5000 meters. Invalid input returns 422; live data failures return 503 with `detail.code=data_unavailable`. Ollama failures return a successful analysis with labeled fallback recommendations and a warning.
+## Existing analysis contract
 
-Optional owner fields are `business_name` (nullable), `business_description` (text), `products_and_services`, `target_customers`, `current_challenges`, `existing_marketing_strategies`, and `owner_preferences` (lists of bounded nonempty strings), `monthly_marketing_budget` (nonnegative numeric, nullable), and `business_stage` (`planning`, `newly_opened`, or `established`, nullable). Budget currency is owner-defined; the backend does not convert currency. Omitted budget means unknown; zero means no paid advertising. The default goal remains Attract more customers for backward compatibility; categories exposes six goal suggestions, and custom nonempty goals remain accepted. Category identifiers stay stable, with additive aliases such as Coffee Shop and Café. Coordinates remain required; no address geocoder is integrated.
-
-The response echoes validated input in `business_information`. Additive `neighborhood_insights` includes complementary category counts, relevant points of interest, up to five nearest competitors from returned markers, subset flags and data quality. `metrics.competitor_share` is matching-category count divided by mapped business count; it is not a revenue share. Category completeness describes known categories within returned full aggregates, while real-world geographic completeness remains unknown. All-unknown categories yield no scores or recommendations. Individual score objects include `contributing_metrics` as well as the original evidence IDs.
-
-Response has `business_type`, `location`, `radius_m`, `metrics`, `evidence`, `nearby_businesses`, `opportunity_signals`, `recommendations`, `metadata`. Authoritative OpenAPI schema is `/openapi.json`; Pydantic definitions are in `app/schemas.py`. Markers use `latitude`, `longitude`, `name`, `category`, `distance_m`, `business_id`, and `ownership='unknown'`. All radius metrics use full neighborhood aggregates; map markers are capped at 200. `metadata.map_truncated` signals truncation. Do not recompute counts from markers.
-
-Evidence consists of `metric_id`, numeric `value`, and `unit`. Recommendation cards include `title`, `description`, `reason`, `supporting_evidence`, `action_steps`, `priority`, and `limitations`. Show the structured evidence as the source of numbers. Always display `metadata.simulated`, `recommendation_source`, and warnings. Empty neighborhoods return no scores or recommendations; render an insufficient-evidence state. Map/category counts describe mapped records, not an exhaustive business census.
-
-Streamlit example (server-side HTTP; no browser CORS needed):
-
-```python
-import requests
-r = requests.post('http://127.0.0.1:8000/api/analyze', json={
-    'business_type': 'coffee_shop',
-    'location': {'latitude': 34.0551, 'longitude': -117.7499},
-    'radius_m': 1500, 'business_goal': 'Attract more customers'
-}, timeout=150)
-r.raise_for_status()
-analysis = r.json()
+```json
+{
+  "business_type": "coffee_shop",
+  "location": {"latitude": 34.0551, "longitude": -117.7499},
+  "radius_m": 1500,
+  "business_goal": "Attract more customers",
+  "include_location_summary": true,
+  "include_score_explanation": false
+}
 ```
 
-## Snowflake setup and A's integration boundary
+`business_type` supports coffee_shop, restaurant, bakery and bookstore; aliases such as Coffee Shop/Café normalize to stable IDs. Category coverage must be verified against the actual listing. Radius is 100–5000 meters. Optional fields: business_name, business_description, products_and_services, target_customers, monthly_marketing_budget, current_challenges, existing_marketing_strategies, business_stage and owner_preferences. List fields contain bounded nonempty strings. Stage is planning/newly_opened/established. Null budget is unknown, zero excludes paid advertising; no currency conversion is inferred. Custom goals remain accepted alongside the six suggested goals from categories. Coordinates are required; no geocoder is integrated.
 
-Use [Overture's official Snowflake instructions](https://docs.overturemaps.org/getting-data/data-mirrors/snowflake/) to acquire the CARTO Places Marketplace listing. Database names are chosen by the subscriber. Inspect the actual schema with `sql/inspect_schema.sql` and CoCo. Current listings may use `taxonomy`/`basic_category`; older releases differ. Do not copy outdated `categories` expressions.
+Existing response keys and types remain: business_type, location, radius_m, metrics, evidence, nearby_businesses, opportunity_signals, recommendations, metadata, business_information and neighborhood_insights. Location explanations are additive and opt-in to avoid doubling default inference cost: `include_location_summary` and `include_score_explanation` return `location_summary` and `score_explanation`. Both are null by default. These flags can result in up to three AI calls per analysis; allow sufficient client timeout.
 
-A creates a canonical SQL view following `sql/neighborhood_analysis.sql` in a writable database. This isolates actual listing fields and geometry conversions from Python. The backend checks the view's column names and string/numeric/GEOGRAPHY types before its first query, caching that metadata validation for five minutes. These checks do not prove coordinate CRS, category coverage, uniqueness or listing provenance; A must verify those. Required view columns:
+Metrics use the full radius query; map markers are bounded at 200 by default. Do not recompute metrics from markers. Marker fields are name, category, latitude, longitude, distance_m, business_id and ownership (unknown). POI/nearest-competitor lists use bounded markers and report truncation; scalar nearest-competitor distance uses the full aggregate. Category completeness measures classified records, never real-world coverage. All-unknown or empty neighborhoods yield no opportunity score or recommendations.
 
-| Column | Contract |
+Recommendation cards retain title, description, reason, supporting_evidence, action_steps, priority and limitations. Each citation has metric_id, value and unit. Always display `metadata.simulated`, `recommendation_source`, warnings and evidence. `recommendation_source=open_weight_model` is reserved for successful validated inference with a model listed in `CORTEX_OPEN_WEIGHT_MODELS`; another explicitly configured model is labeled `cortex_ai`. Fallback is always `deterministic_fallback`, with ai_model null. Adding an allowlist entry is an operator assertion that the actual model license was verified, not an automatic license check.
+
+| Endpoint | Behavior |
 |---|---|
-| BUSINESS_ID | VARCHAR or NULL if unavailable |
-| NAME | VARCHAR, nullable rendered as Unnamed business |
-| CATEGORY | normalized lowercase VARCHAR, unknown when missing |
-| LATITUDE / LONGITUDE | numeric WGS84 degrees |
-| GEOG | Snowflake GEOGRAPHY in WGS84 |
+| GET /api/health | Cheap liveness/configuration; opt-in `check_dependencies=true` checks places availability and Cortex model visibility, not inference success. Legacy ollama key is retained as `removed`. |
+| GET /api/categories | Stable category IDs, provisional dataset mappings, complements and goal suggestions. |
+| POST /api/analyze | Full analytics/scoring/recommendation pipeline. Invalid input 422, live data failure 503, model failure labeled fallback. |
+| POST /api/agent/chat | Saved Cortex Agent with verified warehouse context and real Analyst query references; unavailable setup 503, missing context 404, expired/mismatched conversation 409, rate limit 429. |
+| POST /api/opportunity-map | Bounded same-resolution H3 disk as GeoJSON FeatureCollection. Live query failure 503. Mock mode intentionally returns no H3 fixtures, explicitly labeled. |
 
-Ensure one row per place and primary category. Verify counts and distances independently, sample known locations, inspect null/drop rates, verify category mappings in `app/schemas.py`, and record listing release. A view is required; this adapter does not pretend to discover an unknown schema automatically. Missing business names are preserved as unnamed; unlocated rows cannot support proximity analysis.
+## Snowflake places setup (A)
 
-Set `DATA_MODE=live`, connector account/user/password, warehouse, optional role, and database/schema/table to the **canonical view**. Set `SNOWFLAKE_MAPPING_VERIFIED=true` only after the checks. Set `DATASET_RELEASE` to the recorded release. Restart the API after environment changes. Live Snowflake errors never switch to synthetic data. Password authentication is supported for the MVP; use an account-approved service identity. Never commit credentials. `SnowflakeService.get_nearby_businesses(request, category='coffee_shop')` optionally filters markers before the map limit using bound category aliases; the primary analysis intentionally retains all neighborhood categories for complementary metrics.
+Acquire the CARTO Overture Places listing via [Overture's official Snowflake instructions](https://docs.overturemaps.org/getting-data/data-mirrors/snowflake/). Database names belong to your subscription. Use `sql/inspect_schema.sql` and genuine CoCo exploration to verify the actual release, fields, taxonomy/basic_category or legacy category structure, geometry type, CRS, duplicates and null rates.
 
-Use a dedicated X-Small warehouse with auto-suspend (e.g. 60 seconds), auto-resume and an account resource monitor. Marketplace data may be free while compute incurs charges. Radius and marker caps, a 30-second SQL timeout, query tags, bound values, strict configured identifiers, and aggregate-in-Snowflake logic limit risk. A map LIMIT does not cap geospatial scan cost: inspect query profile and clustering/pruning with A. Connections and cursors close after each request. No global dataset is downloaded. Query-result caching is left to Snowflake; no stale application data cache is used.
+Create an owned canonical **view** following `sql/neighborhood_analysis.sql`. Required fields: BUSINESS_ID VARCHAR (nullable), NAME VARCHAR, CATEGORY normalized lowercase VARCHAR, LATITUDE/LONGITUDE numeric WGS84 degrees, GEOG GEOGRAPHY. Keep one row/primary category per place. Convert real geometry CRS correctly; do not relabel projected coordinates as geography. Keep unavailable ownership unknown. The backend validates required columns/types via DESCRIBE VIEW, caching metadata checks for five minutes; only the data lead can verify semantic correctness and coverage.
 
-## Ollama and model setup
+Set connector account/user/password, warehouse, optional role and the canonical view's database/schema/table. Set `SNOWFLAKE_MAPPING_VERIFIED=true` and actual `DATASET_RELEASE` only after validation. Set `DATA_MODE=live`. Existing connector management, strict identifiers, bound values, ST_DWITHIN/ST_DISTANCE and cursor/connection cleanup are preserved. Use an X-Small warehouse with auto-suspend/auto-resume and an account resource monitor. Marketplace data can be free while compute and AI calls cost credits. Inspect query profiles; a marker LIMIT does not cap scan cost.
 
-Install [Ollama](https://ollama.com/download) using its platform installer, then:
+## Cortex AI setup (B/account administrator)
 
-```powershell
-ollama serve
-# In another terminal:
-ollama pull qwen3:1.7b
-ollama run qwen3:1.7b "Suggest a cautious local business experiment."
+Set `AI_ENABLED=true`, `AI_PROVIDER=snowflake_cortex`, `SNOWFLAKE_CORTEX_MODEL=llama3.3-70b`, `CORTEX_TIMEOUT_S=60`, `CORTEX_TEMPERATURE=0`, `CORTEX_RETRIES=1`. Restart after configuration changes. No automatic provider/model substitution occurs.
+
+First run:
+
+```sql
+SHOW CORTEX BASE MODELS IN SCHEMA SNOWFLAKE.MODELS;
+SELECT CURRENT_REGION();
+SHOW PARAMETERS LIKE 'CORTEX_ENABLED_CROSS_REGION' IN ACCOUNT;
 ```
 
-If the desktop app already serves Ollama, use that service. Set `AI_ENABLED=true`, `OLLAMA_BASE_URL=http://localhost:11434`, `OLLAMA_MODEL=qwen3:1.7b`, `OLLAMA_TIMEOUT_S=45`, `OLLAMA_RETRIES=1`, `OLLAMA_TEMPERATURE=0`, and `OLLAMA_THINK=false`. Restart FastAPI. The backend uses the [official Ollama Python client](https://github.com/ollama/ollama-python) (`ollama>=0.6.3,<1`), not a proprietary model API. It passes Pydantic `model_json_schema()` to `Client.generate(format=...)` following [Ollama structured-output guidance](https://docs.ollama.com/capabilities/structured-outputs), then validates the typed response. Non-thinking mode is the default for Qwen3; other models may require a different `OLLAMA_THINK` setting.
+The provider checks model visibility for the active role, lifecycle and in-region deployment before generation. EOL is rejected; LEGACY is rejected unless explicitly enabled. Cross-region-only models require both explicit `CORTEX_ALLOW_CROSS_REGION=true` and an appropriate account policy; the backend never changes account settings. Presence in SHOW is not proof that a function can execute: permission/quota/region failures still return labeled fallback. Model metadata checks are cached for five minutes. Select an available open-weight replacement explicitly if the preferred model is unavailable, record its license, and update `CORTEX_OPEN_WEIGHT_MODELS` accordingly.
 
-Transient transport errors and HTTP 429/502/503/504 are retried once by default with a short backoff; malformed output and nontransient errors are not retried. Official-client `ResponseError`, connection errors and HTTPX timeouts produce labeled deterministic fallback. Clients close through their context manager. Timeouts apply per HTTP operation per attempt, so overall latency can exceed a single configured timeout. Both mock and live data modes can use the real model; mock data remains labeled simulated. `recommendation_source=open_weight_model` means validated model output, never a fallback. The model selects and writes business experiments based on the complete business profile, existing marketing, goal, preferences, observed metrics, neighborhood data quality and scores. The prompt instructs it to avoid repeating existing campaigns unchanged, respect zero budgets, and treat omitted budgets as unknown. The backend validates three distinct titles and every evidence triple, constructs observation reasons itself, and caches successful outputs for an hour (bounded 128 entries per process). Cache keys include the model server, model name, temperature, thinking setting, owner context and evidence.
+`app/services/cortex_ai_service.py` calls connector-bound `AI_COMPLETE` with `model_parameters` and structured `response_format` JSON Schema. It reuses Pydantic schemas, original prompts/policies, citation equality checks, numerical-prose checks, deterministic fallback and a bounded one-hour per-process success cache. It never calculates counts or scores. The SQL generation format follows [AI_COMPLETE structured output documentation](https://docs.snowflake.com/en/sql-reference/functions/ai_complete-structured-outputs); model discovery follows [SHOW CORTEX BASE MODELS](https://docs.snowflake.com/en/sql-reference/sql/show-cortex-base-models).
 
-Test real Ollama inference with explicitly synthetic sample metrics (no Snowflake credentials or `.env` edits needed):
+Only explicitly transient connection/rate-limit failures are retried, with a bounded backoff; ordinary SQL errors, invalid JSON, unsupported citations and cancelled inference do not trigger repeated calls. Statement and network timeouts apply per request/attempt, not as a strict total wall-clock bound. Raw connector errors, prompts, tokens and credentials are not returned. Free-text semantics cannot be formally verified; owners must review the experiments.
+
+Summary functions describe competition, category gaps, complements and score factors using the same registry. Residential population and survival probability are null, with explicit explanations that no verified demographics or validated historical survival model is available. Fallback summaries are marked separately from actual Cortex output.
+
+Independent live inference check (uses explicitly synthetic sample metrics; not a live places-data check):
 
 ```powershell
-.\.venv\Scripts\python.exe -m scripts.check_ollama --timeout 120
+.\.venv\Scripts\python.exe -m scripts.check_cortex --component ai
 ```
 
-This command checks model installation, generates from a sample owner's profile and synthetic neighborhood metrics, and verifies all citations. Exit 0 means a real validated model response; exit 1 means generation or validation failed and fallback was returned; exit 2 means the model/service is unavailable. This does not verify live Snowflake data. The service supports both the original two-argument call and `generate_recommendations(business_info, neighborhood_insights, opportunity_scores)`; `/api/analyze` uses the explicit three-argument form without changing its JSON response schema.
+Exit 0 means validated live inference, 1 failed/fallback, 2 missing setup. In the current environment it reports BLOCKED, not verified.
 
-The generation schema is derived from the existing Pydantic schema, with additional per-request enums for actual evidence IDs, values and units. Cross-field citation equality is independently checked afterward. Generated prose is constrained to plain English letters/punctuation; observations remain in numeric evidence fields. The same schema is included in the prompt to make the output structure explicit. These generation constraints do not change the frontend-facing Pydantic/API schema. A real local inference smoke test passed on 2026-10-23 in about 5.4 seconds with synthetic sample metrics; this is an observed warm-run time, not a latency guarantee.
+## Saved Agent and semantic view setup (A/B/admin)
 
-Numbers are allowed only in structured evidence, not model-authored prose; unsupported citation IDs/values/units and obvious numerical or certainty claims are rejected. Free-text semantic grounding is not formally provable: owner review remains necessary. On error the backend returns three labeled deterministic experiments; no evidence means none. AI fallback warnings are visible even in live mode. Successful response cache is in memory and lost on restart; prewarm exact demo requests on the demo process.
+1. Review `sql/cortex_setup.sql`: create the owned context table, analytical projection and semantic view. These statements are templates that require live account validation. The API never runs DDL or grants.
+2. Publish actual live analytics using the separate publisher role (INSERT/UPDATE required only for this explicit script):
 
-## Explainable scores
+```powershell
+.\.venv\Scripts\python.exe -m scripts.publish_agent_context --business-id demo-owner --location-id pomona-a --latitude 34.0551 --longitude -117.7499 --business-type coffee_shop --radius-m 1500
+```
 
-Area is `pi * (radius_m / 1000)^2`; competitor density is matching-category count divided by area. Nearest competitor is nullable. Complements are explicit category relationships in `app/schemas.py`, not verified partnerships. Let `p=1/(1+density/5)` and `c=complements/(complements+5)`. Opportunity signal is `100*(0.4*p+0.6*c)`; potential category gap is `100*p`. The scales and weights are hand-selected demo heuristics, favoring actionable partnership experiments while preventing unbounded counts from dominating. These are reproducible descriptive signals, not trained or validated predictions. Zero mapped records yields no score. Completeness is unknown, so no invented confidence percentage is returned. Scores do not support cross-city scientific comparisons.
+The script refuses mock mode and an unrecorded release, queries real places through the existing service, validates a StoredLocationContext, then uses a bound MERGE. Do not publish synthetic fixture metrics as real data. Use a single writer: standard-table primary keys are informational. Runtime rejects missing or duplicate contexts. Business IDs identify supplied owner context, not independently verified ownership.
 
-## Architecture and responsibilities
+3. Install a saved `BLOCKBOOST.PUBLIC.BUSINESS_ADVISOR` using Snowsight or the documented CREATE AGENT/REST interface with `sql/business_advisor_spec.json`. Replace its warehouse placeholder. Its Analyst tool must be named neighborhood_analyst and reference the configured semantic view. Orchestration `auto` is Snowflake-selected and may be proprietary; it does not itself establish open-weight track eligibility.
+4. Give runtime read/usage access to context, analytical/semantic views, warehouse, Cortex/Analyst and saved agent. Verify current model RBAC and network/token policy with the account administrator. Do not use ACCOUNTADMIN as the API role. Spec verification requires the saved specification to be readable; secure/redacted specs fail closed.
+5. Set SNOWFLAKE_AGENT_DATABASE/SCHEMA/NAME, SNOWFLAKE_AGENT_TOOL_NAME, SNOWFLAKE_SEMANTIC_VIEW, SNOWFLAKE_CONTEXT_VIEW, HTTPS SNOWFLAKE_ACCOUNT_BASE_URL, SNOWFLAKE_AGENT_TOKEN and its token type server-side. Set SNOWFLAKE_AGENT_SETUP_VERIFIED=true only after setup. No tokens are returned to clients.
 
-Python/FastAPI/Pydantic v2/Uvicorn serve the contract. Snowflake Connector supplies real geospatial aggregates; HTTPX calls configurable Ollama/Qwen. No ORM, auth, user database, routing optimization, or demographics. Dependency providers in `app/dependencies.py` independently override data and AI for tests. A owns view mappings/category verification; B owns backend and AI; C owns the frontend; D owns repo publication, root license, submission and demo. The inspected frontend is currently a React/Vite starter with no API calls; Streamlit remains a supported server-side integration example. Backend CORS permits local Vite origins by default, configurable with a JSON-array `CORS_ORIGINS` environment value. No frontend files were changed. This folder is self-contained to avoid editing teammates' files. See `docs/architecture.md`, `docs/coco-workflow.md`, `docs/demo-guide.md`, and `docs/backend-audit.md`.
+```json
+{
+  "message": "Why is this location recommended?",
+  "business_id": "demo-owner",
+  "location_id": "pomona-a",
+  "comparison_location_ids": [],
+  "conversation_id": null
+}
+```
 
-## Attribution, licenses and verification
+The server looks up actual analytical context, verifies the saved tool/semantic view configuration, creates a Snowflake thread and invokes the saved agent with Analyst required. It accepts only responses with a successful Analyst result/query reference. It returns supporting_metrics (provided-context evidence, not a claim that every metric was cited), analyst_query_ids, relevant_location_ids and source metadata. Tool warnings or unsupported numerical claims cause a controlled error, not an ungrounded answer.
 
-Original backend code is MIT licensed in `LICENSE`; D should add the agreed root license for the whole public project. [Ollama's selected Qwen3 tag](https://ollama.com/library/qwen3:1.7b) lists Apache License 2.0; [upstream Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) provides model terms. Recheck the specific model artifact if changing tags. Our MIT license does not relicense model weights or third-party assets.
+Send the opaque returned conversation_id and the same business/location set for follow-ups. Snowflake receives the persisted thread ID and last assistant message ID. Server state is bounded, locked and expires after 30 minutes; restart/worker change loses local tokens, requiring a new conversation. This demo should use one API worker. Runs are not automatically retried because a timeout can still persist a turn. Do not automatically retry a failed chat turn. For durable/multi-user hosting, add authorized session persistence and row-access policies; prompt filters do not enforce tenant security.
 
-Dataset: CARTO's Snowflake Marketplace mirror of Overture Maps Places. Review the actual listing terms, release, and [Overture attribution guidance](https://docs.overturemaps.org/attribution/) before publication; do not assume a universal dataset license. Synthetic demo records are original fixtures, not Overture results. Libraries retain their own terms (FastAPI/Pydantic/HTTPX/Pytest MIT; Uvicorn BSD-3-Clause; Snowflake connector Apache-2.0); preserve notices when redistributing. Verify the complete installed dependency set before bundling it.
+Agent live check is separate:
 
-Automated tests mock Snowflake and Ollama; they establish local behavior, not live connectivity or submission eligibility. Real CoCo exploration, listing schema, live SQL, model generation on the demo laptop, public repository visibility and submission remain explicit team verification steps. No CoCo usage evidence is fabricated.
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_cortex --component agent --business-id demo-owner --location-id pomona-a
+```
+
+Implementation uses the documented [saved Agent Run REST API](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run) with stream=false and [Snowflake threads](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-threads-rest-api), via existing HTTPX. No extra SDK dependency or invented Agent object is used.
+
+## H3 opportunity map
+
+POST `/api/opportunity-map` with business_type, location, resolution (7/8/9) and grid_disk_k (0–4). A bounded grid contains at most 61 full cells. `sql/opportunity_map.sql` seeds cells using Snowflake H3_GRID_DISK, left-joins category aggregates, uses actual ST_AREA in square kilometers for density, and calculates the original deterministic score in SQL. Empty cells remain in the response with null score, not a fabricated demand opportunity. The grid is not a clipped circle; comparisons use full cells at the same resolution. A conservative geographic pruning envelope bounds the places query. No AI call is made per cell; request a location summary only for selected locations through analyze.
+
+GeoJSON properties contain H3 IDs, area, counts, density, distribution, heuristic score and limited/insufficient data confidence. Geographic coverage remains unknown and population null. Mock mode has no H3 fixtures and returns an explicitly labeled empty FeatureCollection, not a claim that the real neighborhood is empty. H3 SQL remains unverified against a live account.
+
+## Scoring and limitations
+
+Existing circular analysis uses area `pi*(radius_m/1000)^2`. Let `p=1/(1+density/5)` and `c=complements/(complements+5)`. Opportunity is `100*(0.4*p+0.6*c)`; potential category gap is `100*p`. Hand-selected saturation scales and weights support a demo hypothesis, not a trained or statistically validated forecast. Python remains the authoritative existing analysis implementation; SQL H3 and semantic-view formulas mirror it for zone analytics. Missing/unknown categories, stale releases, radius differences and overlapping neighborhoods limit comparisons. Actual buying behavior, traffic, brand ownership, revenue and business survival are unavailable.
+
+## Attribution and submission
+
+Original backend code remains MIT licensed. [Meta's Llama 3.3 model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) identifies the custom Llama 3.3 Community License; it is open-weight, not MIT/Apache or an OSI license claim. Snowflake model-service terms, model lifecycle and regional permissions also apply. Recheck the actual selected model and terms before submission. Agent orchestration can use a proprietary model; open-weight recommendation/explanation inference must actually run to demonstrate that requirement.
+
+Review actual CARTO listing terms and [Overture attribution](https://docs.overturemaps.org/attribution/) before publication. Our MIT license does not override model, dataset or dependency terms. Snowflake connector is Apache-2.0; FastAPI/Pydantic/HTTPX/Pytest retain their licenses and Uvicorn BSD-3-Clause. Legacy local-model checks in historical verification records do not verify the new architecture.
+
+Use `docs/coco-workflow.md` to capture genuine CoCo work; none is invented here. D must verify the public repository, root project license, team submission and event-specific rules. See `docs/cortex-migration.md` for audit/reuse details and `docs/verification.md` for exact current checks.

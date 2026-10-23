@@ -1,5 +1,3 @@
-import json
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -61,49 +59,6 @@ def test_unknown_categories_withhold_scores_and_ai(analysis_request):
     assert recs == [] and source == 'insufficient_evidence'
 
 
-def test_model_profile_and_endpoint(request_data):
-    request_data.update(products_and_services=['Study bundles'], target_customers=['Students'],
-                        existing_marketing_strategies=['Student discounts'], monthly_marketing_budget=100)
-    request = AnalysisRequest(**request_data)
-    evidence = get_neighborhood_insights(from_businesses(request, demo_businesses(request)))
-    batch = RecommendationBatch(recommendations=fallback(evidence))
-    calls = []
-    def handler(req):
-        calls.append(json.loads(req.content))
-        return httpx.Response(200, json={'response': batch.model_dump_json()})
-    service = AIService(Settings(_env_file=None, ai_enabled=True), httpx.MockTransport(handler))
-    app.dependency_overrides[get_ai_service] = lambda: service
-    response = client.post('/api/analyze', json=request_data)
-    assert response.status_code == 200
-    assert response.json()['metadata']['recommendation_source'] == 'open_weight_model'
-    prompt = json.loads(calls[0]['prompt'])
-    assert prompt['context']['existing_marketing_strategies'] == ['Student discounts']
-    assert prompt['context']['monthly_marketing_budget'] == 100
-    assert prompt['neighborhood']['data_quality']['confidence'] == 'limited'
-    assert 'Do not repeat' in calls[0]['system']
-
-
-def test_transient_retry(analysis_request):
-    evidence = get_neighborhood_insights(from_businesses(analysis_request, demo_businesses(analysis_request)))
-    metrics = from_businesses(analysis_request, demo_businesses(analysis_request))
-    calls = []
-    def handler(req):
-        calls.append(req)
-        if len(calls) == 1:
-            return httpx.Response(503)
-        return httpx.Response(200, json={'response': RecommendationBatch(recommendations=fallback(evidence)).model_dump_json()})
-    service = AIService(Settings(_env_file=None, ai_enabled=True), httpx.MockTransport(handler))
-    assert service.generate_recommendations(analysis_request, {'metrics': metrics, 'evidence': evidence, 'scores': []})[1] == 'open_weight_model'
-    assert len(calls) == 2
-
-
-@pytest.mark.parametrize('models,expected', [(['qwen3:1.7b'], 'available'), ([], 'model_missing')])
-def test_model_probe(models, expected):
-    service = AIService(Settings(_env_file=None, ai_enabled=True), httpx.MockTransport(
-        lambda req: httpx.Response(200, json={'models': [{'model': m} for m in models]})))
-    assert service.check_availability() == expected
-
-
 def test_probe_explicit_only():
     class Probe:
         calls = 0
@@ -117,7 +72,7 @@ def test_probe_explicit_only():
     assert data.calls == ai.calls == 0
     body = client.get('/api/health?check_dependencies=true').json()
     assert body['dependencies_checked'] is True
-    assert body['snowflake'] == body['ollama'] == 'available'
+    assert body['snowflake'] == body['cortex'] == 'available'
     assert data.calls == ai.calls == 1
 
 
@@ -150,45 +105,3 @@ def test_empty_action_rejected(analysis_request):
     recs[0]['action_steps'] = [' ']
     with pytest.raises(ValidationError):
         RecommendationBatch(recommendations=recs)
-
-
-def test_nontransient_error_not_retried(analysis_request):
-    metrics = from_businesses(analysis_request, demo_businesses(analysis_request))
-    calls = []
-    def handler(req):
-        calls.append(req)
-        return httpx.Response(404)
-    service = AIService(Settings(_env_file=None, ai_enabled=True), httpx.MockTransport(handler))
-    result = service.generate_recommendations(analysis_request, {'metrics': metrics, 'evidence': get_neighborhood_insights(metrics), 'scores': []})
-    assert result[1] == 'deterministic_fallback' and len(calls) == 1
-
-
-def test_full_mocked_live_pipeline(request_data):
-    from unittest.mock import MagicMock
-    from app.services.snowflake_service import SnowflakeService
-    settings = Settings(_env_file=None, data_mode='live', ai_enabled=True,
-        snowflake_mapping_verified=True, snowflake_database='db', snowflake_schema='public', snowflake_table='places')
-    cursor, connection = MagicMock(), MagicMock()
-    connection.cursor.return_value = cursor
-    cursor.fetchall.side_effect = [
-        [('BUSINESS_ID', 'VARCHAR'), ('NAME', 'VARCHAR'), ('CATEGORY', 'VARCHAR'),
-         ('LATITUDE', 'FLOAT'), ('LONGITUDE', 'FLOAT'), ('GEOG', 'GEOGRAPHY')],
-        [('aggregate', 'coffee_shop', 2, 20, None, None, None, None, None),
-         ('aggregate', 'school', 1, 50, None, None, None, None, None),
-         ('place', 'coffee_shop', None, None, 'a', 'Mocked place', 34.055, -117.75, 20)]]
-    def handler(req):
-        from app.schemas import Evidence
-        evidence = [Evidence(**e) for e in json.loads(json.loads(req.content)['prompt'])['evidence']]
-        return httpx.Response(200, json={'response': RecommendationBatch(recommendations=fallback(evidence)).model_dump_json()})
-    app.dependency_overrides[get_settings] = lambda: settings
-    app.dependency_overrides[get_data_service] = lambda: SnowflakeService(settings, MagicMock(return_value=connection))
-    app.dependency_overrides[get_ai_service] = lambda: AIService(settings, httpx.MockTransport(handler))
-    response = client.post('/api/analyze', json=request_data)
-    assert response.status_code == 200
-    body = response.json()
-    assert body['metrics']['competitor_count'] == 2
-    assert body['metadata']['data_source'] == 'snowflake'
-    assert body['metadata']['simulated'] is False
-    assert body['metadata']['recommendation_source'] == 'open_weight_model'
-    assert body['neighborhood_insights']['marker_subset_only'] is True
-    assert body['neighborhood_insights']['complementary_categories'] == {'school': 1}

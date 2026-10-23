@@ -25,3 +25,26 @@ def isolate_dependencies():
     app.dependency_overrides[get_ai_service] = lambda: AIService(settings)
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def cortex_factory():
+    import json
+    from unittest.mock import MagicMock
+    def create(result, model='llama3.3-70b', lifecycle='GA', regions=None):
+        cursor, connection = MagicMock(), MagicMock()
+        connection.cursor.return_value = cursor
+        state = {}
+        cursor.description = [(c,) for c in ['name', 'lifecycle_status', 'in_region_availability', 'cross_region_availability']]
+        def execute(sql, params=None):
+            state.update(sql=sql, params=params)
+        cursor.execute.side_effect = execute
+        cursor.fetchall.side_effect = lambda: [(model, lifecycle, json.dumps(regions if regions is not None else ['AWS_US_WEST_2']), '[]')]
+        def fetchone():
+            if 'CURRENT_REGION' in state['sql']:
+                return ('AWS_US_WEST_2',)
+            value = result(state['params']) if callable(result) else result
+            return (json.dumps(value) if not isinstance(value, str) else value,)
+        cursor.fetchone.side_effect = fetchone
+        return MagicMock(return_value=connection), cursor
+    return create

@@ -36,8 +36,10 @@ def analyze(request: AnalysisRequest, data=Depends(get_data_service), ai=Depends
         warnings.append('SIMULATED: fixed synthetic Pomona records; not actual Overture observations.')
     return AnalysisResponse(business_type=request.business_type, location=request.location, radius_m=request.radius_m,
         business_information=request, neighborhood_insights=summary,
+        location_summary=ai.generate_location_summary(request, metrics) if request.include_location_summary else None,
+        score_explanation=ai.explain_opportunity_score(metrics) if request.include_score_explanation else None,
         metrics=metrics, evidence=evidence, nearby_businesses=places, opportunity_signals=scores,
         recommendations=recommendations, metadata=Metadata(data_source='mock' if settings.data_mode == 'mock' else 'snowflake',
             simulated=settings.data_mode == 'mock', dataset_release=settings.dataset_release,
-            ai_model=settings.ollama_model if source == 'open_weight_model' else None,
+            ai_model=settings.snowflake_cortex_model if source in {'open_weight_model', 'cortex_ai'} else None,
             recommendation_source=source, warnings=warnings, map_truncated=metrics.total_businesses>len(places)))
