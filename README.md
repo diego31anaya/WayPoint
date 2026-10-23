@@ -23,7 +23,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173
 | Neighborhood → Recommended | Strategies to test from `/api/analyze`, plus idea cards from the static data | Strategies only |
 | Chat (signed in) | Answers grounded in your last search, via `/api/chat` | Yes |
 
-**AI answers.** With the defaults, strategies are rule-based, and the chat replies with the neighborhood facts and says the model isn't running. For AI-written strategies and free-form chat, install [Ollama](https://ollama.com/download), run `ollama pull qwen3:1.7b`, then set `AI_ENABLED=true` in `backend/.env` and restart the backend. See `backend/README.md` for the API, scoring and Snowflake live mode.
+**AI answers.** With the defaults, strategies are rule-based, and the chat replies with the neighborhood facts and says the model isn't running. For AI-written strategies and free-form chat, the backend uses Snowflake Cortex (`AI_COMPLETE`): put your Snowflake credentials in `backend/.env`, set `AI_ENABLED=true`, and restart the backend. See `backend/README.md` for the API, scoring, Cortex setup and Snowflake live mode.
 
 Tests: `cd backend && .venv/bin/python -m pytest -q`, and `cd frontend && npm run lint && npm run build`.
 

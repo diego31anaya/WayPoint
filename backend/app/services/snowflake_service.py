@@ -30,15 +30,15 @@ class SnowflakeService:
         self.connect = connect
         self.schema_checked_at = None
 
-    def _connection(self):
+    def _connection(self, statement_timeout_s=30):
         s = self.settings
         connect = self.connect
         if connect is None:
             import snowflake.connector
             connect = snowflake.connector.connect
         kwargs = dict(account=s.snowflake_account, user=s.snowflake_user, password=s.snowflake_password,
-                      warehouse=s.snowflake_warehouse, login_timeout=10, network_timeout=20,
-                      session_parameters={'STATEMENT_TIMEOUT_IN_SECONDS': 30, 'QUERY_TAG': 'BlockBoost'})
+                      warehouse=s.snowflake_warehouse, login_timeout=10, network_timeout=max(20, statement_timeout_s+5),
+                      session_parameters={'STATEMENT_TIMEOUT_IN_SECONDS': statement_timeout_s, 'QUERY_TAG': 'BlockBoost'})
         if s.snowflake_role:
             kwargs['role'] = s.snowflake_role
         return connect(**kwargs)

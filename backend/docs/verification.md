@@ -1,5 +1,17 @@
 # Verification record — 2026-10-23
 
+## Snowflake Cortex migration (current)
+
+- Latest migrated suite: **89 passed**. Preserved analytics/scoring/API tests and replaced local-model tests with mocked connector AI_COMPLETE tests. Added saved-Agent HTTP mocks, thread continuity, strict context lookup, unsupported numerical claims/tool failures, SQL H3 behavior and context publisher tests.
+- `pip check`: **No broken requirements found**. The requirements and active services have no Ollama dependency, import or localhost inference call.
+- AI_COMPLETE live check: **BLOCKED** because Snowflake account/user credentials are not configured. No model visibility, remote inference or actual model lifecycle has been verified in this account. llama3.3-70b is a configured preference, not an executed model.
+- Cortex Agent live check: **BLOCKED** because token, verified saved objects and real context IDs are missing. No saved agent, semantic view, thread or Analyst execution is claimed to exist remotely.
+- H3 SQL, curated setup DDL and semantic view execution: **unverified live**. Query binding, cell inclusion structure, full-area normalization formula, empty-cell handling and response contracts were tested with mocks/static SQL assertions.
+- Context publishing MERGE and commit behavior are mocked, not a real warehouse write.
+- Real Uvicorn loopback HTTP smoke passed for health, categories, analyze with both optional explanations, OpenAPI generation, opportunity-map and the controlled 503 from unconfigured agent/chat. Mock analysis returned two synthetic competitors and three explicitly deterministic recommendations; mock H3 returned an explicitly labeled empty collection.
+- Final `git diff --check` found no whitespace errors. These HTTP checks validate local serving/contracts, not live Snowflake execution.
+- No frontend changes, .env modifications, commits or pushes were made. Earlier local-Qwen verification below is historical and does not apply to the new provider.
+
 ## Official Ollama client integration (latest)
 
 - Migrated generation and availability calls to `ollama.Client` (installed version 0.6.3), retaining existing schemas, scoring, evidence validation, cache, fallbacks and API response fields.

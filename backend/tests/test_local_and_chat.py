@@ -44,19 +44,23 @@ def test_chat_fallback_is_honest_and_uses_context():
     assert body['source'] == 'fallback' and 'ZIP 91768' in body['reply'] and body['warnings']
 
 
-def test_chat_uses_model_when_enabled():
-    import httpx, json
-
-    def model(request):
-        sent = json.loads(request.content)
-        assert sent['messages'][0]['role'] == 'system' and 'ZIP 91768' in sent['messages'][0]['content']
-        return httpx.Response(200, json={'model': 'qwen3:1.7b', 'created_at': '2026-10-23T00:00:00Z', 'done': True,
-                                         'message': {'role': 'assistant', 'content': 'Try a student study-hour deal.'}})
+def test_chat_uses_cortex_when_enabled(cortex_factory):
+    connect, cursor = cortex_factory('Try a student study-hour deal.')
     settings = Settings(_env_file=None, ai_enabled=True)
-    app.dependency_overrides[get_ai_service] = lambda: AIService(settings, transport=httpx.MockTransport(model))
+    app.dependency_overrides[get_ai_service] = lambda: AIService(settings, connect)
     body = TestClient(app).post('/api/chat', json={'messages': [{'role': 'user', 'content': 'Idea?'}],
                                                    'context': 'ZIP 91768'}).json()
     assert body == {'reply': 'Try a student study-hour deal.', 'source': 'open_weight_model', 'warnings': []}
+    sql, params = cursor.execute.call_args.args
+    assert 'AI_COMPLETE' in sql and 'ZIP 91768' in params[1] and 'USER: Idea?' in params[1]
+
+
+def test_chat_cortex_failure_falls_back_without_leaking(cortex_factory):
+    from unittest.mock import MagicMock
+    settings = Settings(_env_file=None, ai_enabled=True)
+    app.dependency_overrides[get_ai_service] = lambda: AIService(settings, MagicMock(side_effect=RuntimeError('password=secret')))
+    body = TestClient(app).post('/api/chat', json={'messages': [{'role': 'user', 'content': 'Hi'}], 'context': 'ZIP 91768'}).json()
+    assert body['source'] == 'fallback' and 'ZIP 91768' in body['reply'] and 'secret' not in str(body)
 
 
 def test_chat_rejects_empty_messages():

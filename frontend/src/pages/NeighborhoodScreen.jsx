@@ -272,7 +272,7 @@ function Strategies({ result, businessType, isSaved, onSave }) {
   if (result.status === 'error') return <div className="business-list-status">Strategy service offline. Start the backend (see README) for tailored strategies.</div>
   const { recommendations, metadata } = result.data
   if (!recommendations.length) return <div className="business-list-status">Not enough mapped businesses nearby for strategies.</div>
-  const source = metadata.recommendation_source === 'open_weight_model'
+  const source = ['open_weight_model', 'cortex_ai'].includes(metadata.recommendation_source)
     ? `Written by ${metadata.ai_model} from these numbers`
     : 'Rule-based (the AI model isn’t running)'
   const data = {

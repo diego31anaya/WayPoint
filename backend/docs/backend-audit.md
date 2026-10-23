@@ -1,3 +1,5 @@
+> Historical audit before the Snowflake Cortex migration. For current provider, endpoints, setup and verification, see cortex-migration.md and verification.md.
+
 # Backend audit and integration handoff
 
 ## Baseline inspected before edits

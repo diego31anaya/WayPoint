@@ -48,6 +48,8 @@ class AnalysisRequest(StrictModel):
     current_challenges: list[Text] = Field(default_factory=list, max_length=20)
     existing_marketing_strategies: list[Text] = Field(default_factory=list, max_length=20)
     business_stage: Literal['planning', 'newly_opened', 'established'] | None = None
+    include_location_summary: bool = False
+    include_score_explanation: bool = False
 
     @field_validator('business_type', mode='before')
     @classmethod
@@ -132,7 +134,8 @@ class Metadata(StrictModel):
     dataset: str = 'Overture Maps Places'
     dataset_release: str
     ai_model: str | None
-    recommendation_source: Literal['open_weight_model', 'deterministic_fallback', 'insufficient_evidence']
+    recommendation_source: Literal['open_weight_model', 'cortex_ai', 'deterministic_fallback', 'insufficient_evidence']
+    ai_provider: str = 'snowflake_cortex'
     warnings: list[str]
     map_truncated: bool
     category_mapping_status: str = 'candidate mappings; confirm against listing'
@@ -150,6 +153,8 @@ class AnalysisResponse(StrictModel):
     metadata: Metadata
     business_information: AnalysisRequest | None = None
     neighborhood_insights: NeighborhoodInsights | None = None
+    location_summary: 'LocationExplanation | None' = None
+    score_explanation: 'LocationExplanation | None' = None
 
 
 class ChatMessage(StrictModel):
@@ -165,5 +170,82 @@ class ChatRequest(StrictModel):
 
 class ChatResponse(StrictModel):
     reply: str
-    source: Literal['open_weight_model', 'fallback']
+    source: Literal['open_weight_model', 'cortex_ai', 'fallback']
     warnings: list[str]
+
+
+class ExplanationContent(StrictModel):
+    summary: str = Field(min_length=1, max_length=1600)
+    factors: list[Text] = Field(min_length=1, max_length=8)
+    supporting_evidence: list[Evidence] = Field(min_length=1, max_length=20)
+
+
+class LocationExplanation(ExplanationContent):
+    source: Literal['open_weight_model', 'cortex_ai', 'deterministic_fallback']
+    model: str | None
+    limitations: list[str]
+    population: None = None
+    survival_probability: None = None
+
+
+class StoredLocationContext(StrictModel):
+    business_information: AnalysisRequest
+    metrics: Metrics
+    data_source: Literal['snowflake']
+    dataset_release: str
+
+
+class AgentChatRequest(StrictModel):
+    message: str = Field(min_length=1, max_length=3000)
+    business_id: Text
+    location_id: Text
+    comparison_location_ids: list[Text] = Field(default_factory=list, max_length=4)
+    conversation_id: str | None = Field(default=None, min_length=20, max_length=100)
+
+
+class AgentChatResponse(StrictModel):
+    response: str
+    conversation_id: str
+    supporting_metrics: dict[str, list[Evidence]]
+    relevant_location_ids: list[str]
+    analyst_query_ids: list[str]
+    metadata: dict
+
+
+class OpportunityMapRequest(StrictModel):
+    business_type: Literal['coffee_shop', 'restaurant', 'bakery', 'bookstore']
+    location: Location
+    resolution: Literal[7, 8, 9] = 8
+    grid_disk_k: int = Field(default=2, ge=0, le=4)
+
+
+class ZoneGeometry(StrictModel):
+    type: Literal['Polygon']
+    coordinates: list[list[list[float]]]
+
+
+class ZoneProperties(StrictModel):
+    h3_cell: str
+    area_sq_km: float = Field(gt=0)
+    competitor_count: int = Field(ge=0)
+    competitor_density_per_sq_km: float = Field(ge=0)
+    complementary_count: int = Field(ge=0)
+    total_businesses: int = Field(ge=0)
+    unknown_category_count: int = Field(ge=0)
+    category_distribution: dict[str, int]
+    opportunity_score: float | None = Field(default=None, ge=0, le=100)
+    confidence: Literal['insufficient', 'limited']
+    geographic_coverage: Literal['unknown'] = 'unknown'
+    population: None = None
+
+
+class ZoneFeature(StrictModel):
+    type: Literal['Feature'] = 'Feature'
+    geometry: ZoneGeometry
+    properties: ZoneProperties
+
+
+class OpportunityMapResponse(StrictModel):
+    type: Literal['FeatureCollection'] = 'FeatureCollection'
+    features: list[ZoneFeature]
+    metadata: dict

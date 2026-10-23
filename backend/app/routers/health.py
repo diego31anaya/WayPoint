@@ -10,6 +10,9 @@ def health(check_dependencies: bool = False, settings=Depends(get_settings),
            data=Depends(get_data_service), ai=Depends(get_ai_service)):
     return {'status': 'ok', 'data_mode': settings.data_mode,
             'snowflake': data.check_availability() if check_dependencies else ('not_used' if settings.data_mode in ('mock', 'local') else ('configured_not_probed' if settings.snowflake_mapping_verified else 'mapping_required')),
-            'ollama': ai.check_availability() if check_dependencies else ('enabled_not_probed' if settings.ai_enabled else 'disabled'),
+            'ollama': 'removed',
+            'cortex': ai.check_availability() if check_dependencies else ('enabled_not_probed' if settings.ai_enabled else 'disabled'),
+            'ai_provider': settings.ai_provider,
+            'agent': 'configured_not_probed' if settings.snowflake_agent_setup_verified else 'setup_required',
             'dependencies_checked': check_dependencies,
-            'model': settings.ollama_model}
+            'model': settings.snowflake_cortex_model}
