@@ -34,8 +34,9 @@
 .chat-suggestion-list button:hover { border-color: #9bb19a; background: #f8faf7; }
 .chat-messages { width: min(740px, 100%); margin: 0 auto; }
 .chat-message { display: flex; align-items: flex-start; gap: 13px; padding: 14px 0; }
-.chat-message.user { justify-content: flex-end; flex-direction: row-reverse; }
+.chat-message.user { justify-content: flex-end; }
 .chat-message-avatar { margin-top: 1px; }
+.chat-message.user .chat-message-avatar { display: none; }
 .chat-message.assistant .chat-message-avatar { background: #365b43; color: #fff; }
 .chat-message p { margin: 2px 0 0; color: #39483d; font-size: 15px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-message.user p { max-width: min(78%, 560px); padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: #edf2ec; }
