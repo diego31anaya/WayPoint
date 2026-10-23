@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AccountControl from './components/AccountControl'
 import ChatNavButton from './components/ChatNavButton'
+import AboutDataPage from './pages/AboutDataPage'
 import AccountPage from './pages/AccountPage'
 import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
@@ -11,6 +12,8 @@ import './App.css'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
 const FEATURED_ZIP = '91768'
+// The rehearsed demo case (master plan): coffee shop near Cal Poly Pomona. #demo opens it directly.
+const DEMO_SEARCH = { businessType: 'Coffee shop', zipCode: '91768', radiusMiles: 2 }
 
 // Shown until the featured neighborhood data loads.
 function fallbackRecommendations(businessType) {
@@ -87,9 +90,10 @@ function App() {
   const [zipCode, setZipCode] = useState('')
   const [radius, setRadius] = useState('3')
   const [message, setMessage] = useState('')
-  const [activeSearch, setActiveSearch] = useState(null)
+  const [activeSearch, setActiveSearch] = useState(() => (window.location.hash === '#demo' ? DEMO_SEARCH : null))
   const [activeSavedPlace, setActiveSavedPlace] = useState(null)
-  const [currentPage, setCurrentPage] = useState('home')
+  // #about-the-data opens the data story and #demo the rehearsed search, for demos and slides.
+  const [currentPage, setCurrentPage] = useState(() => ({ '#about-the-data': 'about', '#demo': 'neighborhood' }[window.location.hash] ?? 'home'))
   const [returnPage, setReturnPage] = useState('home')
   const [featuredData, setFeaturedData] = useState(null)
   const [dataIndex, setDataIndex] = useState(null)
@@ -156,6 +160,37 @@ function App() {
     })
     setActiveSavedPlace(null)
     setCurrentPage('neighborhood')
+  }
+
+  function openAbout(event) {
+    event?.preventDefault()
+    setCurrentPage('about')
+    window.scrollTo(0, 0)
+  }
+
+  function startDemo() {
+    setBusinessType(DEMO_SEARCH.businessType)
+    setZipCode(DEMO_SEARCH.zipCode)
+    setRadius(String(DEMO_SEARCH.radiusMiles))
+    setActiveSearch(DEMO_SEARCH)
+    setActiveSavedPlace(null)
+    setCurrentPage('neighborhood')
+    window.scrollTo(0, 0)
+  }
+
+  if (currentPage === 'about') {
+    return (
+      <AboutDataPage
+        user={currentUser}
+        onBack={() => { setCurrentPage('home'); window.scrollTo(0, 0) }}
+        onExplore={() => {
+          setCurrentPage('home')
+          requestAnimationFrame(() => document.getElementById('get-started')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+        }}
+        onCreateAccount={handleCreateAccount}
+        onOpenDashboard={() => setCurrentPage('dashboard')}
+      />
+    )
   }
 
   if (currentPage === 'account') {
@@ -228,6 +263,7 @@ function App() {
         <nav className="main-nav" aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#insights">What you’ll see</a>
+          <a href="#about-the-data" onClick={openAbout}>About the data</a>
         </nav>
         <div className="home-header-actions">
           {currentUser && <ChatNavButton onClick={handleOpenChat} />}
@@ -277,6 +313,7 @@ function App() {
             <button type="submit">Explore my area <span>→</span></button>
             {message && <p className="form-message" id="form-message" role="status">{message}</p>}
           </form>
+          <button className="demo-button" type="button" onClick={startDemo}>Try the demo: a coffee shop near Cal Poly Pomona (91768, 2 mi) <span>→</span></button>
           <div className="hero-footnote"><span>✦</span> Local context, made useful for independent businesses.</div>
         </div>
         <div className="hero-visual">
@@ -337,7 +374,7 @@ function App() {
 
       <footer className="site-footer page-shell">
         <a className="brand" href="#home" aria-label="WayPoint home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>WayPoint</span></a>
-        <span>Built for the businesses that make a neighborhood.</span>
+        <span>Built for the businesses that make a neighborhood. <a href="#about-the-data" className="footer-about" onClick={openAbout}>About the data</a></span>
         <a href="#home" className="back-top">Back to top ↑</a>
       </footer>
       </main>

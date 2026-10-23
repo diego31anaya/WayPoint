@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import { useAuth } from '../context/useAuth'
-import { fetchZipBoundary } from '../services/zipBoundary'
+import { backendBusinessType, fetchStrategies } from '../services/api'
+import { fetchHeat, HEAT_GRADIENT, scoreColor } from '../services/heatmap'
+import { distanceInMiles, fetchZipBoundary } from '../services/zipBoundary'
 import { CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
 
@@ -49,13 +51,58 @@ function addPlaces(map, zipData, category, radiusMiles) {
   }
 }
 
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+
+function direction(from, to) {
+  const dx = (to[1] - from[1]) * Math.cos((from[0] * Math.PI) / 180)
+  return COMPASS[Math.round((((Math.atan2(dx, to[0] - from[0]) * 180) / Math.PI + 360) % 360) / 45) % 8]
+}
+
+// Plain-language reading of one heatmap hexagon; every number comes from data/heatmap.py output.
+function describeCell(cell, heat) {
+  const labels = CATEGORY_LABELS[heat.category]
+  return `${cell.competitors} ${cell.competitors === 1 ? labels.one : labels.many} within about 1 km, where a typical LA area this busy has ${Math.round(cell.expected)}. `
+    + `Estimated closure rate ${percent(cell.closure_rate)} (LA ${percent(heat.la_closure_rate)}). ${cell.businesses} businesses nearby.`
+}
+
+function heatPopup(cell, heat) {
+  const box = document.createElement('div')
+  const title = document.createElement('strong')
+  const text = document.createElement('span')
+  box.className = 'place-popup'
+  title.textContent = `Opportunity ${cell.score}/100 for a ${CATEGORY_LABELS[heat.category].one}`
+  text.textContent = `${describeCell(cell, heat)} Relative proxy, not a forecast.`
+  box.append(title, text)
+  return box
+}
+
+// Highest-scoring heatmap hexagons within the search radius, shaped like place cards.
+function bestSpots(heat, zipData, radiusMiles) {
+  if (!heat || !zipData) return []
+  const center = [zipData.center.lat, zipData.center.lon]
+  return heat.cells
+    .map((cell) => ({ cell, miles: distanceInMiles(center, cell.center) }))
+    .filter(({ miles }) => miles <= radiusMiles)
+    .sort((a, b) => b.cell.score - a.cell.score)
+    .slice(0, 3)
+    .map(({ cell, miles }) => ({
+      id: `spot-${heat.category}-${cell.cell}`,
+      name: `${miles.toFixed(1)} mi ${direction(center, cell.center)} of the ${zipData.zip} center`,
+      category: `Opportunity ${cell.score}/100 · relative proxy`,
+      address: describeCell(cell, heat),
+      coordinates: cell.center,
+      tags: [`Score ${cell.score}/100`, `${cell.competitors} vs ${Math.round(cell.expected)} typical`],
+      isSpot: true,
+    }))
+}
+
 function placeCoordinates(place) {
   const lat = place?.lat ?? place?.coordinates?.[0]
   const lon = place?.lon ?? place?.coordinates?.[1]
   return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null
 }
 
-function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selectedPlace }) {
+function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selectedPlace, heat }) {
   const mapElement = useRef(null)
 
   useEffect(() => {
@@ -82,6 +129,15 @@ function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selected
     map.attributionControl.addAttribution(
       '<a href="https://www.census.gov/programs-surveys/geography/guidance/geo-areas/zctas.html">ZIP Code Tabulation Area data © U.S. Census Bureau</a>',
     )
+    if (heat) {
+      // Opportunity heatmap under the pins: one hexagon per H3 cell, colored by score.
+      const renderer = L.canvas({ padding: 0.5 })
+      heat.cells.forEach((cell) => {
+        L.polygon(cell.outline, { renderer, weight: 0.5, color: '#ffffff', opacity: 0.7, fillColor: scoreColor(cell.score), fillOpacity: 0.5 })
+          .bindPopup(() => heatPopup(cell, heat))
+          .addTo(map)
+      })
+    }
     if (zipData) {
       addPlaces(map, zipData, category, dataRadius(radiusMiles))
       map.attributionControl.addAttribution('Places © <a href="https://overturemaps.org">Overture Maps Foundation</a>')
@@ -97,16 +153,17 @@ function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selected
         fillOpacity: 0.45,
         className: 'selected-map-ping',
       }).bindPopup(placePopup(selectedPlace)).addTo(map).bringToFront()
-      map.setView(selectedCoordinates, Math.max(map.getZoom(), 16), { animate: true })
+      // A heatmap spot is a ~0.74 km² hexagon: show it with its neighbors, not street level.
+      map.setView(selectedCoordinates, selectedPlace.isSpot ? 14 : Math.max(map.getZoom(), 16), { animate: true })
     }
 
     return () => map.remove()
-  }, [geoJson, zipData, category, radiusMiles, selectedPlace])
+  }, [geoJson, zipData, category, radiusMiles, selectedPlace, heat])
 
   return <div className="leaflet-map" ref={mapElement} role="region" aria-label={`Map of ZIP code ${zipCode}`} />
 }
 
-function NeighborhoodMap({ zipCode, radiusMiles, zipData, category, selectedPlace }) {
+function NeighborhoodMap({ zipCode, radiusMiles, zipData, category, selectedPlace, heat, heatOn, onToggleHeat }) {
   const [mapResult, setMapResult] = useState({ status: 'loading', geoJson: null })
   const [retryCount, setRetryCount] = useState(0)
 
@@ -137,7 +194,14 @@ function NeighborhoodMap({ zipCode, radiusMiles, zipData, category, selectedPlac
           <span className="location-mark" aria-hidden="true">⌖</span>
           <span><small>ZIP CODE</small><strong>{zipCode}</strong></span>
         </div>
-        <span className="radius-badge">Search radius <strong>{radiusMiles} mi</strong></span>
+        <div className="map-toolbar-actions">
+          {heat && (
+            <button className={`heat-toggle${heatOn ? ' is-on' : ''}`} type="button" aria-pressed={heatOn} onClick={onToggleHeat}>
+              <span className="heat-swatch" style={{ background: HEAT_GRADIENT }} />{heatOn ? 'Hide' : 'Show'} opportunity heatmap
+            </button>
+          )}
+          <span className="radius-badge">Search radius <strong>{radiusMiles} mi</strong></span>
+        </div>
       </div>
       <div className="neighborhood-map-stage">
         {mapResult.status === 'ready' && (
@@ -148,9 +212,18 @@ function NeighborhoodMap({ zipCode, radiusMiles, zipData, category, selectedPlac
             category={category}
             radiusMiles={radiusMiles}
             selectedPlace={selectedPlace}
+            heat={heatOn ? heat : null}
           />
         )}
-        {mapResult.status === 'ready' && zipData && (
+        {mapResult.status === 'ready' && heat && heatOn && (
+          <div className="heat-legend">
+            <strong>Where a new {CATEGORY_LABELS[heat.category].one} has room</strong>
+            <span className="heat-bar" style={{ background: HEAT_GRADIENT }} />
+            <span className="heat-scale"><span>Crowded, more closures</span><span>More room</span></span>
+            <small>Score = 45% room vs a typical LA area this busy + 35% closure rate vs LA + 20% activity, per ~0.74 km² hexagon. A relative proxy, not a forecast. Click a hexagon for its numbers.</small>
+          </div>
+        )}
+        {mapResult.status === 'ready' && zipData && !(heat && heatOn) && (
           <div className="map-pin-legend">
         <span><i className="pin-dot pin-independent" />Independent {CATEGORY_LABELS[category]?.one ?? 'businesses'}</span>
         <span><i className="pin-dot pin-chain" />Chain {CATEGORY_LABELS[category]?.one ?? 'businesses'}</span>
@@ -326,27 +399,15 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function recommendedLocations(zipData, category) {
-  if (!zipData) return []
-  const { lat, lon } = zipData.center
-  const label = CATEGORY_LABELS[category].one
-  return [
-    { id: 'recommended-1', name: 'Emerging neighborhood corridor', category: 'High opportunity area', address: `Near ${zipData.zip} town center`, distance: '0.6 mi', coordinates: [lat + 0.006, lon - 0.008], tags: ['Underserved', `Good fit for ${label}`] },
-    { id: 'recommended-2', name: 'Growing residential pocket', category: 'Growing area', address: `Near ${zipData.zip} residential district`, distance: '1.1 mi', coordinates: [lat - 0.008, lon + 0.006], tags: ['New development', 'Local foot traffic'] },
-    { id: 'recommended-3', name: 'Main street opportunity', category: 'Commercial corridor', address: `Near ${zipData.zip} main street`, distance: '1.5 mi', coordinates: [lat + 0.011, lon + 0.012], tags: ['Visibility', 'Nearby businesses'] },
-  ]
-}
-
 function placeKey(place) {
   return place.id ?? `${place.name}-${place.lat ?? place.coordinates?.[0] ?? ''}-${place.lon ?? place.coordinates?.[1] ?? ''}`
 }
 
-function PlaceResultsPanel({ search, zipData, category, selectedPlace, onSelectPlace, onCreateAccount }) {
+function PlaceResultsPanel({ search, zipData, category, recommendations, selectedPlace, onSelectPlace, onCreateAccount }) {
   const [activeTab, setActiveTab] = useState('competitors')
   const [saveToast, setSaveToast] = useState('')
   const { user, savedLocations, saveLocation, removeSavedLocation } = useAuth()
   const competitors = zipData?.places?.filter((place) => place.category === category).slice(0, 20) ?? []
-  const recommendations = recommendedLocations(zipData, category)
   const places = activeTab === 'recommended' ? recommendations : competitors
 
   function toggleSaved(place) {
@@ -389,7 +450,7 @@ function PlaceResultsPanel({ search, zipData, category, selectedPlace, onSelectP
         <button className={activeTab === 'competitors' ? 'active' : ''} type="button" onClick={() => setActiveTab('competitors')}>Competitors <b>({competitors.length})</b></button>
         <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({recommendations.length})</b></button>
       </div>
-      <div className="places-caption">{activeTab === 'recommended' ? 'Suggested areas based on local signals' : 'Nearby businesses in this category'}</div>
+      <div className="places-caption">{activeTab === 'recommended' ? 'Highest-scoring heatmap hexagons within your radius. A relative proxy, not a forecast.' : `${CATEGORY_LABELS[category].many[0].toUpperCase()}${CATEGORY_LABELS[category].many.slice(1)} listed inside ZIP ${search.zipCode}, top 20. The numbers above count the whole radius.`}</div>
       <div className="places-list">
         {!zipData && <div className="places-status">Loading businesses in this ZIP code…</div>}
         {zipData && !places.length && <div className="places-status">No matching businesses found in this area.</div>}
@@ -428,11 +489,98 @@ function PlaceResultsPanel({ search, zipData, category, selectedPlace, onSelectP
   )
 }
 
+// Headline numbers for the exact search (ZIP center, nearest data radius), all from the ZIP export.
+function SearchMetrics({ search, category, zipResult }) {
+  if (zipResult.status !== 'ready') return null
+  const data = zipResult.data
+  const miles = dataRadius(search.radiusMiles)
+  const labels = CATEGORY_LABELS[category]
+  const stats = data.categories[category][String(miles)]
+  const businesses = Object.values(data.categories).reduce((sum, byRadius) => sum + byRadius[String(miles)].competitors, 0)
+  const ratio = stats.density_ratio
+  let gap = '—'
+  if (ratio != null) gap = ratio < 0.95 ? `${Math.round((1 - ratio) * 100)}% fewer` : ratio > 1.05 ? `${Math.round((ratio - 1) * 100)}% more` : 'About even'
+  const tiles = [
+    { value: businesses.toLocaleString(), label: `walk-in businesses within ${miles} mi` },
+    { value: stats.competitors.toLocaleString(), label: `${labels.many} (your competitors) within ${miles} mi` },
+    { value: stats.competitors ? percent(stats.independent / stats.competitors) : '—', label: `independent (${stats.independent} of ${stats.competitors})` },
+    { value: gap, label: `${labels.many} per km² than the surrounding 10 km`, note: 'Category gap: a heuristic, not a forecast' },
+  ]
+  return (
+    <div className="search-metrics" aria-label="Headline numbers for this search">
+      {tiles.map((tile) => (
+        <div className="search-metric" key={tile.label} title={tile.note}>
+          <strong>{tile.value}</strong>
+          <span>{tile.label}</span>
+          {tile.note && <small>{tile.note}</small>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const evidenceText = (e) => `${e.metric_id.replace('category_count:', '').replaceAll('_', ' ')}: ${Number.isInteger(e.value) ? e.value.toLocaleString() : e.value.toFixed(2)} ${e.unit}`
+
+// Experiments from the backend's /api/analyze, always labeled with where they came from.
+function StrategiesSection({ search, category, zipData }) {
+  const type = backendBusinessType(search.businessType, category)
+  const center = zipData ? [zipData.center.lat, zipData.center.lon] : null
+  const key = `${search.zipCode}-${search.radiusMiles}-${type}`
+  const [result, setResult] = useState({ key: null })
+  useEffect(() => {
+    if (!type || !center) return undefined
+    const controller = new AbortController()
+    fetchStrategies({ businessType: type, center, radiusMiles: dataRadius(search.radiusMiles) }, { signal: controller.signal })
+      .then((data) => setResult({ key, status: 'ready', data }))
+      .catch(() => { if (!controller.signal.aborted) setResult({ key, status: 'error' }) })
+    return () => controller.abort()
+  // center is derived from zipData; key covers the rest.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, zipData])
+  if (!type || !zipData) return null
+  const current = result.key === key ? result : { status: 'loading' }
+  let body
+  if (current.status === 'loading') body = <p className="strategies-status">Building experiments for this neighborhood…</p>
+  else if (current.status === 'error') body = <p className="strategies-status">The strategy service is offline right now. The map and numbers above don’t depend on it.</p>
+  else if (!current.data.recommendations.length) body = <p className="strategies-status">Not enough mapped businesses nearby to suggest experiments.</p>
+  else {
+    const meta = current.data.metadata
+    const ai = ['open_weight_model', 'cortex_ai'].includes(meta.recommendation_source)
+    const source = ai ? `Written by ${meta.ai_model} via Snowflake Cortex from these numbers` : 'Rule-based experiments (the AI model isn’t running)'
+    const data = { snowflake: 'counts from a live Snowflake query', local: 'counts from the Snowflake export of LA places', mock: 'synthetic demo data' }[meta.data_source]
+    body = (
+      <>
+        <p className="strategies-source">{source} · {data}</p>
+        <div className="strategies-grid">
+          {current.data.recommendations.map((rec) => (
+            <article className="strategy-card" key={rec.title}>
+              <span className="strategy-priority">{rec.priority} priority</span>
+              <h3>{rec.title}</h3>
+              <p>{rec.description}</p>
+              <ol>{rec.action_steps.map((step) => <li key={step}>{step}</li>)}</ol>
+              <div className="strategy-evidence">{rec.supporting_evidence.map((e) => <span key={e.metric_id}>{evidenceText(e)}</span>)}</div>
+            </article>
+          ))}
+        </div>
+      </>
+    )
+  }
+  return (
+    <section className="strategies-section" aria-label="Experiments to test">
+      <div className="eyebrow">PLAN A TEST</div>
+      <h2>Low-cost experiments to try <em>next</em></h2>
+      {body}
+    </section>
+  )
+}
+
 function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, initialSelectedPlace }) {
   const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
   const [selectedPlace, setSelectedPlace] = useState(initialSelectedPlace ?? null)
+  const [heatResult, setHeatResult] = useState({ category: null })
+  const [heatOn, setHeatOn] = useState(false)
   // A result for a different ZIP means the new one is still loading.
   const zipResult = loaded.zip === search.zipCode ? loaded : { status: 'loading', data: null }
 
@@ -452,6 +600,21 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
   useEffect(() => {
     fetchDataIndex().then(setIndex).catch(() => setIndex(null))
   }, [])
+
+  useEffect(() => {
+    let current = true
+    fetchHeat(category)
+      .then((heat) => { if (current) setHeatResult({ category, heat }) })
+      .catch(() => { if (current) setHeatResult({ category, heat: null }) })
+    return () => { current = false }
+  }, [category])
+  const heat = heatResult.category === category ? heatResult.heat : null
+  const spots = useMemo(() => bestSpots(heat, zipResult.data, search.radiusMiles), [heat, zipResult.data, search.radiusMiles])
+
+  function selectPlace(place) {
+    setSelectedPlace(place)
+    if (place?.isSpot) setHeatOn(true)
+  }
 
   return (
     <main className="neighborhood-screen">
@@ -489,14 +652,21 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
             <span className="heading-divider">·</span>
             Within {search.radiusMiles} miles
           </p>
+          <p className="data-provenance">
+            Snapshot of Overture Maps places (via CARTO on the Snowflake Marketplace), exported Oct 23, 2026 · Census: SafeGraph ACS 2019 ·
+            Static data, not a live warehouse query · Scores are heuristics, not forecasts
+            {dataRadius(search.radiusMiles) !== search.radiusMiles && ` · Numbers use the nearest radius we have (${dataRadius(search.radiusMiles)} mi)`}
+          </p>
         </div>
+        <SearchMetrics search={search} category={category} zipResult={zipResult} />
         <div className="finder-layout">
           <PlaceResultsPanel
             search={search}
             zipData={zipResult.data}
             category={category}
+            recommendations={spots}
             selectedPlace={selectedPlace}
-            onSelectPlace={setSelectedPlace}
+            onSelectPlace={selectPlace}
             onCreateAccount={onCreateAccount}
           />
           <div className="finder-map-column">
@@ -506,6 +676,9 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
               zipData={zipResult.data}
               category={category}
               selectedPlace={selectedPlace}
+              heat={heat}
+              heatOn={heatOn}
+              onToggleHeat={() => setHeatOn((on) => !on)}
             />
           </div>
         </div>
@@ -514,6 +687,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
           {zipResult.data && ' Pins show businesses listed in this ZIP; the dashed ring is the radius the numbers below use.'}
         </p>
         <NeighborhoodInsights search={search} category={category} zipResult={zipResult} index={index} />
+        <StrategiesSection search={search} category={category} zipData={zipResult.data} />
       </section>
     </main>
   )

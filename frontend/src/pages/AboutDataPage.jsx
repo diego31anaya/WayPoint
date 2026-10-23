@@ -199,20 +199,18 @@ function AboutDataPage({ user, onBack, onExplore, onCreateAccount, onOpenDashboa
   const bls = facts.bls_survival
   const blsAll = bls.rows.filter((r) => r.industry === 'All private businesses')
   const food = Object.fromEntries(bls.rows.filter((r) => r.industry === 'Accommodation and food services').map((r) => [r.years, r.still_open]))
-  const own = f.independent_vs_chain
-  const ratio = own.independent[0] / own.chain[0]
-  const competition = Object.entries(f.closure_by_competition_500m)
-  const income = Object.entries(f.closure_by_income)
-  const riskMax = Math.max(...competition.map(([, v]) => v[0]), ...income.map(([, v]) => v[0])) * 1.18
-  const [lo, hi] = f.income_terciles_usd
-  const incomeRange = { lower: `under $${lo / 1000}k`, middle: `$${lo / 1000}k–$${hi / 1000}k`, upper: `over $${hi / 1000}k` }
-  const ownershipGroups = [['All places', own], ...Object.entries(f.by_category).map(([k, v]) => [CATEGORY_NAMES[k], v])].map(([label, v]) => ({
-    label,
-    values: { independent: v.independent[0], chain: v.chain[0] },
-    details: { independent: `${count(v.independent[1])} of ${count(v.independent[2])} closed`, chain: `${count(v.chain[1])} of ${count(v.chain[2])} closed` },
-  }))
-  const firstComp = f.closure_by_competition_500m['0'][0]
-  const lastComp = f.closure_by_competition_500m['16+'][0]
+  const sf = facts.snowflake_findings
+  const ds = f.dataset
+  const ratio = sf.independent_closure / sf.chain_closure
+  const competition = sf.closure_by_competition_500m
+  const income = sf.closure_by_income_tercile
+  const riskMax = Math.max(...competition.map(([, v]) => v), ...income.map(([, v]) => v)) * 1.18
+  const ownershipGroups = [
+    { label: 'All places', values: { independent: sf.independent_closure, chain: sf.chain_closure } },
+    { label: 'Shopping', values: { independent: sf.shopping_independent_closure, chain: sf.shopping_chain_closure } },
+  ]
+  const firstComp = competition[0][1]
+  const lastComp = competition.at(-1)[1]
 
   return (
     <main className="about-page">
@@ -222,7 +220,7 @@ function AboutDataPage({ user, onBack, onExplore, onCreateAccount, onOpenDashboa
         <div className="eyebrow">THE DATA BEHIND THE MAP</div>
         <h1>Where a small business opens <em>matters.</em></h1>
         <p className="about-lede">
-          Small businesses carry the economy, but in Los Angeles independents close <b>{ratio.toFixed(1)}×</b> as often as chains.
+          Small businesses carry the economy, but across LA County our Snowflake analysis found independents closed <b>{ratio.toFixed(1)}×</b> as often as chains.
           Closures climb with nearby competition, from <b>{pct(firstComp)}</b> with no rival within 500 m to <b>{pct(lastComp)}</b> with 16 or more,
           while neighborhood income barely moves them. WayPoint shows owners where the room is.
         </p>
@@ -237,6 +235,18 @@ function AboutDataPage({ user, onBack, onExplore, onCreateAccount, onOpenDashboa
           <span className="source-divider" />
           <span className="data-source"><b className="source-mark">◎</b> SBA &amp; BLS</span>
         </div>
+      </section>
+
+      <section className="about-section page-shell" id="the-data">
+        <div className="eyebrow">THE DATA</div>
+        <h2>Real places, at <em>neighborhood</em> scale</h2>
+        <div className="about-tiles">
+          {[[ds.places, 'LA-area place records in our Snowflake export'], [ds.zips, 'ZIP codes with precomputed neighborhood data'],
+            [ds.block_groups, 'census block groups (SafeGraph ACS 2019)'], [ds.chain_names, 'names in our California chain-reference list']].map(([value, label]) => (
+            <article className="about-card about-tile" key={label}><strong>{count(value)}</strong><span>{label}</span></article>
+          ))}
+        </div>
+        <p className="about-intro">Counted from the files the site runs on (data/la_places.csv.gz, frontend/public/data/index.json, data/la_cbg.csv, data/ca_chains.csv). The 2019 ACS figures may not match today’s population.</p>
       </section>
 
       <section className="about-section page-shell" id="why-it-matters">
@@ -274,8 +284,8 @@ function AboutDataPage({ user, onBack, onExplore, onCreateAccount, onOpenDashboa
         <article className="about-card">
           <h3>Closure rate by ownership, LA area</h3>
           <p className="about-note">
-            Permanently closed ÷ (open + permanently closed), across {count(f.places_with_status)} Overture places with a status.
-            Chain = an Overture brand, or a name with a brand tag or 10+ locations across California.
+            Recorded closures ÷ (open + recorded closures), across {count(sf.places_with_status)} LA County Overture places with a status, analyzed in Snowflake with Cortex Code (CoCo).
+            Chain = an Overture brand, a name repeated nearby, or a name common across California. Recorded closure shares, not probabilities of failure.
           </p>
           <div className="about-legend"><span><i style={{ background: 'var(--green)' }} />Independent</span><span><i style={{ background: 'var(--orange)' }} />Chain</span></div>
           <Bars w={1000} groups={ownershipGroups} max={Math.max(...ownershipGroups.flatMap((g) => Object.values(g.values)))} format={(v) => pct(v)}
@@ -286,18 +296,17 @@ function AboutDataPage({ user, onBack, onExplore, onCreateAccount, onOpenDashboa
       <section className="about-section page-shell" id="what-predicts-closing">
         <div className="eyebrow">WHAT PREDICTS CLOSING</div>
         <h2>Nearby competition does. <em>Income barely does.</em></h2>
-        <p className="about-intro">Both charts use the same scale. Each place is counted by how many active businesses of its own type (cafe, restaurant, retail or services) sit within 500 m, and by the median household income of its nearest census block group (ACS 2019).</p>
+        <p className="about-intro">Both charts use the same scale. From the same Snowflake analysis: each place by how many same-category competitors sit within 500 m, and by its census block group’s median household income (ACS 2019).</p>
         <div className="about-grid">
           <article className="about-card">
             <h3>Closure rate by same-type competitors within 500 m</h3>
-            <Columns rows={competition.map(([k, v]) => ({ key: k, value: v[0], detail: `${count(v[1])} of ${count(v[2])} closed` }))}
-              max={riskMax} color="var(--green)" label={(r) => r.key} />
+            <Columns rows={competition.map(([k, v]) => ({ key: k, value: v }))} max={riskMax} color="var(--green)" label={(r) => r.key} />
+            <p className="about-note">{sf.competition_note}</p>
           </article>
           <article className="about-card">
             <h3>Closure rate by neighborhood income</h3>
-            <Columns rows={income.map(([k, v]) => ({ key: k, value: v[0], detail: `${incomeRange[k]} · ${count(v[1])} of ${count(v[2])} closed` }))}
-              max={riskMax} color="#c3c6ba" label={(r) => `${r.key[0].toUpperCase()}${r.key.slice(1)} third`} />
-            <p className="about-note">Thirds of places by block-group median household income: {incomeRange.lower}, {incomeRange.middle}, {incomeRange.upper}.</p>
+            <Columns rows={income.map(([k, v]) => ({ key: k, value: v }))} max={riskMax} color="#c3c6ba" label={(r) => `${r.key} third`} />
+            <p className="about-note">Thirds of places by block-group median household income (ACS 2019).</p>
           </article>
         </div>
       </section>

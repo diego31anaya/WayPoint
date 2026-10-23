@@ -27,6 +27,15 @@ cd frontend && npm install && npm run dev      # http://localhost:5173
 
 Tests: `cd backend && .venv/bin/python -m pytest -q`, and `cd frontend && npm run lint && npm run build`.
 
+**Demo shortcuts:** `http://localhost:5173/#demo` opens the rehearsed search (coffee shop, 91768, 2 miles). `#about-the-data` opens the data story.
+
+## License and credits
+
+WayPoint's code is released under the [MIT License](LICENSE) (`backend/` also ships its own MIT license).
+Place data © [Overture Maps Foundation](https://overturemaps.org), distributed by [CARTO](https://carto.com) on the Snowflake Marketplace; see Overture's [attribution guidance](https://docs.overturemaps.org/attribution/).
+Census data: SafeGraph US Open Census Data (ACS 2019 5-year). Small-business figures: SBA Office of Advocacy and BLS, cited on the About the data page (`data/external_facts.json`).
+AI: the backend calls Snowflake Cortex `AI_COMPLETE` with `llama3.3-70b` (Meta Llama 3.3 Community License) when `AI_ENABLED=true`. Live inference has not been verified yet; see `docs/snowflake-proof.md`.
+
 ## Data
 
 ### Dataset

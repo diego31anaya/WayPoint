@@ -42,7 +42,10 @@ def main():
     status = places[places.operating_status.isin(["open", "permanently_closed"])].copy()
     status["closed"] = status.operating_status == "permanently_closed"
 
-    out = {"places_in_export": len(places), "places_with_status": len(status),
+    index = json.loads((db.HERE.parent / "frontend" / "public" / "data" / "index.json").read_text())
+    out = {"dataset": {"places": len(db.offline_rows()), "zips": len(index["zips"]),
+                       "block_groups": len(pd.read_csv(db.HERE / "la_cbg.csv")), "chain_names": len(pd.read_csv(db.CHAINS))},
+           "places_in_export": len(places), "places_with_status": len(status),
            "overall_closure": rate(status.closed)}
     out["independent_vs_chain"] = {"independent": rate(status.closed[~status.chain]),
                                    "chain": rate(status.closed[status.chain])}

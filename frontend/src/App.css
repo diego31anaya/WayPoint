@@ -169,3 +169,6 @@ h2 { font-family: var(--serif); font-size: 40px; line-height: 1.08; letter-spaci
   .data-source { font-size: 8px; }
 }
 .footer-about { margin-left: 10px; color: var(--green); font-weight: 700; text-decoration: none; }
+.demo-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 0; border: 0; background: none; color: var(--green); font: 700 12px var(--sans); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.demo-button:hover { color: var(--orange); }
+.demo-button:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }

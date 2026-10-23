@@ -1,4 +1,10 @@
 {
+ "dataset": {
+  "places": 342543,
+  "zips": 342,
+  "block_groups": 7883,
+  "chain_names": 10608
+ },
  "places_in_export": 342541,
  "places_with_status": 306120,
  "overall_closure": [
