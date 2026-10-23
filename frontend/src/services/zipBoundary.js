@@ -44,7 +44,7 @@ export async function fetchZipCenter(zipCode, { signal } = {}) {
   return place ? [Number(place.lat), Number(place.lon)] : null
 }
 
-function distanceInMiles(from, to) {
+export function distanceInMiles(from, to) {
   const [lat1, lon1] = from.map(Number)
   const [lat2, lon2] = to.map(Number)
   const earthRadius = 3958.8
@@ -67,7 +67,8 @@ function placeAddress(tags) {
 export async function fetchNearbyPlaces(center, radiusMiles, { signal } = {}) {
   const [latitude, longitude] = center
   const radiusMeters = Math.max(500, Math.round(Number(radiusMiles) * 1609.34))
-  const query = `[out:json][timeout:25];nwr["name"](around:${radiusMeters},${latitude},${longitude});out center tags;`
+  // Only the tags placeCategory reads, capped at 400: "every named thing" times out in dense areas.
+  const query = `[out:json][timeout:25];nwr["name"][~"^(shop|amenity|office|craft|leisure|tourism)$"~"."](around:${radiusMeters},${latitude},${longitude});out center tags 400;`
   const url = new URL('https://overpass-api.de/api/interpreter')
   url.searchParams.set('data', query)
   const response = await fetch(url, { signal })
@@ -85,14 +86,15 @@ export async function fetchNearbyPlaces(center, radiusMiles, { signal } = {}) {
       return {
         id: `${element.type}-${element.id}`,
         name: tags.name,
-        category: placeCategory(tags),
+        category: placeCategory(tags).replaceAll('_', ' '),
+        group: placeCategory(tags),
         address: placeAddress(tags),
-        distance: `${distance.toFixed(1)} mi`,
+        miles: distance,
         coordinates: point,
         tags: [tags.opening_hours ? 'Hours available' : 'Nearby', tags['contact:phone'] ? 'Contact listed' : 'Local place'],
       }
     })
     .filter(Boolean)
-    .sort((first, second) => Number.parseFloat(first.distance) - Number.parseFloat(second.distance))
+    .sort((first, second) => first.miles - second.miles)
     .slice(0, 40)
 }
