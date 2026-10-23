@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
-    data_mode: Literal['mock', 'live'] = 'mock'
+    data_mode: Literal['local', 'mock', 'live'] = 'local'
+    # Live mode only: on a Snowflake failure, analyze the local export of the same table (labeled) instead of a 503.
+    local_fallback: bool = False
     ai_enabled: bool = False
     ai_provider: Literal['snowflake_cortex'] = 'snowflake_cortex'
     snowflake_cortex_model: str = 'llama3.3-70b'

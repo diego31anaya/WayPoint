@@ -1,3 +1,4 @@
+from app.data.category_groups import CAFE
 import json
 from unittest.mock import MagicMock
 import pytest
@@ -36,13 +37,19 @@ def test_empty_cells_and_sql_formula():
     assert 'LEFT JOIN tagged' in sql and 'H3_GRID_DISK' in sql and 'ST_AREA' in sql
     assert 'AI_COMPLETE' not in sql and '0.4 / (1 +' in sql
     assert params[:4] == (34.0551, -117.7499, 8, 2)
-    assert json.loads(params[4]) == ['coffee_shop', 'cafe']
+    assert json.loads(params[4]) == list(CAFE)
 
 
 def test_mock_map_explicit():
-    body = OpportunityMapService(Settings(_env_file=None)).get_map(map_request())
+    body = OpportunityMapService(Settings(_env_file=None, data_mode='mock')).get_map(map_request())
     assert body.features == [] and body.metadata['simulated'] is True
     assert 'no H3 geometry fixtures' in body.metadata['limitations'][-1]
+
+
+def test_local_map_points_to_precomputed_heatmap():
+    body = OpportunityMapService(Settings(_env_file=None)).get_map(map_request())
+    assert body.features == [] and body.metadata['simulated'] is False and body.metadata['data_source'] == 'local'
+    assert 'frontend/public/data/heat' in body.metadata['limitations'][-1]
 
 
 def test_map_error():

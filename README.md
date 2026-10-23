@@ -2,6 +2,31 @@
 
 Find independent local businesses ("hidden gems") near you, plus owner-view numbers on competition and category gaps.
 
+## Run the site
+
+Two terminals, from the repo root:
+
+```bash
+# 1. Backend API (Python 3.11+). Uses the real LA places in data/la_places.csv.gz; no credentials needed.
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/uvicorn app.main:app --port 8000
+
+# 2. Frontend (Node 20+). Vite forwards /api to the backend.
+cd frontend && npm install && npm run dev      # http://localhost:5173
+```
+
+| Page | What it does | Needs the backend? |
+|---|---|---|
+| Home | Search by business type, ZIP and radius. The example brief for 91768 uses real data | No |
+| Neighborhood | Business finder: list, numbered pins, details, directions, saved list. Census ZIP outline and insight cards. LA ZIPs use Overture data and other ZIPs use live OpenStreetMap | No |
+| Neighborhood → Recommended | Strategies to test from `/api/analyze`, plus idea cards from the static data | Strategies only |
+| Chat (signed in) | Answers grounded in your last search, via `/api/chat` | Yes |
+
+**AI answers.** With the defaults, strategies are rule-based, and the chat replies with the neighborhood facts and says the model isn't running. For AI-written strategies and free-form chat, the backend uses Snowflake Cortex (`AI_COMPLETE`): put your Snowflake credentials in `backend/.env`, set `AI_ENABLED=true`, and restart the backend. See `backend/README.md` for the API, scoring, Cortex setup and Snowflake live mode.
+
+Tests: `cd backend && .venv/bin/python -m pytest -q`, and `cd frontend && npm run lint && npm run build`.
+
 ## Data
 
 ### Dataset
@@ -49,6 +74,15 @@ Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon,
 const zip = await fetch(`/data/zip/${zipCode}.json`).then(r => r.ok ? r.json() : null)  // null = ZIP not covered
 ```
 Coverage: ZIPs with 50+ businesses in the box lon −118.95 to −117.65, lat 33.70 to 34.82 (LA County plus parts of Orange, Ventura and San Bernardino). ZIPs at the box's edge have partial radius counts.
+
+### Opportunity heatmap
+`python3 -m data.heatmap` (a few seconds) scores every H3 hexagon (resolution 8, ~0.74 km²) in the covered area for each category and writes `frontend/public/data/heat/` (`cells.json` outlines plus one score file per category). `data/sql/heatmap.sql` is the same computation in Snowflake with `H3_LATLNG_TO_CELL_STRING` and `H3_GRID_DISK`; it hasn't been run yet, and it ends with checks that compare against the Python output.
+
+Each hexagon is scored over itself and its 6 neighbors (~1.3 km across), and only if that neighborhood has 25+ active businesses:
+- **room** = 1 − (competitors ÷ expected) / 2, clamped to 0–1. *Expected* is what a typical LA area this busy has (the category's LA-wide share × businesses nearby).
+- **survival** = 1 − (closure rate ÷ LA closure rate) / 2, clamped. The closure rate is shrunk toward LA's rate (10 pseudo-places), so a single closure doesn't paint a hexagon red.
+- **activity** = log(1 + businesses) ÷ log(1 + 90th percentile), clamped. This keeps empty land from looking like opportunity.
+- **score** = 100 × (0.45 room + 0.35 survival + 0.20 activity). Red means crowded with more closures; green and blue mean more room. Like the other scores, it's a proxy, not measured demand.
 
 ### How the numbers are made
 - **Filtered to** places with Overture confidence > 0.7, then mapped from Overture's `TAXONOMY` to four friendly categories (`data/categories.py`):

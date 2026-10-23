@@ -1,0 +1,147 @@
+{
+ "note": "Hand-copied from the cited publications on 2026-10-23. Each row names its source; update by re-reading the source.",
+ "sba": [
+  {
+   "id": "us_small_businesses",
+   "geography": "United States",
+   "metric": "Small businesses",
+   "value": 36200000.0,
+   "period": "2025 profiles",
+   "source": "SBA Office of Advocacy press release, Jun 30 2025",
+   "url": "https://advocacy.sba.gov/2025/06/30/new-advocacy-report-shows-the-number-of-small-businesses-in-the-u-s-exceeds-36-million/"
+  },
+  {
+   "id": "us_employment_share",
+   "geography": "United States",
+   "metric": "Share of private-sector employment at small businesses",
+   "value": 0.46,
+   "period": "2025 profiles (\"almost 46 percent\")",
+   "source": "SBA Office of Advocacy press release, Jun 30 2025",
+   "url": "https://advocacy.sba.gov/2025/06/30/new-advocacy-report-shows-the-number-of-small-businesses-in-the-u-s-exceeds-36-million/"
+  },
+  {
+   "id": "us_net_new_jobs_share",
+   "geography": "United States",
+   "metric": "Share of net new jobs created by small businesses",
+   "value": 0.9,
+   "period": "Mar 2023 to Mar 2024 (\"approximately 9 out of every 10\")",
+   "source": "SBA Office of Advocacy press release, Jun 30 2025",
+   "url": "https://advocacy.sba.gov/2025/06/30/new-advocacy-report-shows-the-number-of-small-businesses-in-the-u-s-exceeds-36-million/"
+  },
+  {
+   "id": "ca_small_businesses",
+   "geography": "California",
+   "metric": "Small businesses",
+   "value": 4340000.0,
+   "period": "2025 profiles",
+   "source": "SBA Office of Advocacy press release, Jun 30 2025",
+   "url": "https://advocacy.sba.gov/2025/06/30/new-advocacy-report-shows-the-number-of-small-businesses-in-the-u-s-exceeds-36-million/"
+  },
+  {
+   "id": "ca_employment_share",
+   "geography": "California",
+   "metric": "Share of employees at small businesses",
+   "value": 0.471,
+   "period": "2024 California profile",
+   "source": "SBA Office of Advocacy, 2024 Small Business Profile: California",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2024/11/California.pdf"
+  },
+  {
+   "id": "ca_small_net_jobs",
+   "geography": "California",
+   "metric": "Net new jobs at small businesses",
+   "value": 137334,
+   "period": "Mar 2022 to Mar 2023 (BLS Business Employment Dynamics)",
+   "source": "SBA Office of Advocacy, 2024 Small Business Profile: California",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2024/11/California.pdf"
+  },
+  {
+   "id": "ca_all_net_jobs",
+   "geography": "California",
+   "metric": "Net new jobs, all businesses",
+   "value": 81803,
+   "period": "Mar 2022 to Mar 2023 (BLS Business Employment Dynamics)",
+   "source": "SBA Office of Advocacy, 2024 Small Business Profile: California",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2024/11/California.pdf"
+  },
+  {
+   "id": "la_small_businesses",
+   "geography": "Los Angeles-Long Beach-Anaheim metro",
+   "metric": "Small businesses",
+   "value": 1800000.0,
+   "period": "2022 data, 2025 metro profile",
+   "source": "SBA Office of Advocacy, 2025 Small Business Profiles (West)",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2025/10/West_2025_FINAL.pdf"
+  },
+  {
+   "id": "la_business_share",
+   "geography": "Los Angeles-Long Beach-Anaheim metro",
+   "metric": "Share of businesses that are small",
+   "value": 0.998,
+   "period": "2022 data, 2025 metro profile",
+   "source": "SBA Office of Advocacy, 2025 Small Business Profiles (West)",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2025/10/West_2025_FINAL.pdf"
+  },
+  {
+   "id": "la_employment_share",
+   "geography": "Los Angeles-Long Beach-Anaheim metro",
+   "metric": "Share of employees at small businesses",
+   "value": 0.526,
+   "period": "2022 data, 2025 metro profile",
+   "source": "SBA Office of Advocacy, 2025 Small Business Profiles (West)",
+   "url": "https://advocacy.sba.gov/wp-content/uploads/2025/10/West_2025_FINAL.pdf"
+  }
+ ],
+ "bls_survival": {
+  "source": "U.S. Bureau of Labor Statistics, Business Employment Dynamics (The Economics Daily, Jan 12 2024)",
+  "url": "https://www.bls.gov/opub/ted/2024/34-7-percent-of-business-establishments-born-in-2013-were-still-operating-in-2023.htm",
+  "cohort": "U.S. private-sector establishments born in March 2013",
+  "rows": [
+   {
+    "industry": "All private businesses",
+    "years": 1,
+    "still_open": 0.796
+   },
+   {
+    "industry": "All private businesses",
+    "years": 5,
+    "still_open": 0.506
+   },
+   {
+    "industry": "All private businesses",
+    "years": 10,
+    "still_open": 0.347
+   },
+   {
+    "industry": "Accommodation and food services",
+    "years": 1,
+    "still_open": 0.825
+   },
+   {
+    "industry": "Accommodation and food services",
+    "years": 5,
+    "still_open": 0.553
+   },
+   {
+    "industry": "Accommodation and food services",
+    "years": 10,
+    "still_open": 0.382
+   },
+   {
+    "industry": "Retail trade",
+    "years": 1,
+    "still_open": 0.842
+   },
+   {
+    "industry": "Retail trade",
+    "years": 5,
+    "still_open": 0.583
+   },
+   {
+    "industry": "Retail trade",
+    "years": 10,
+    "still_open": 0.417
+   }
+  ]
+ }
+}

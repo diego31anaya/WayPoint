@@ -86,7 +86,7 @@ def test_complete_analysis_profile_and_explanations(request_data, cortex_factory
     assert body['metadata']['simulated'] is True
     assert body['location_summary']['source'] == body['score_explanation']['source'] == 'open_weight_model'
     assert 'Student discounts' in prompts[0] and 'monthly_marketing_budget' in prompts[0]
-    assert body['metrics']['competitor_count'] == 2 and len(body['recommendations']) == 3
+    assert body['metrics']['competitor_count'] == 3 and len(body['recommendations']) == 3
 
 
 def test_retry_transient_only(analysis_request, cortex_factory):

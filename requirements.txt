@@ -1,2 +1,4 @@
 snowflake-connector-python
 pandas
+h3
+scipy

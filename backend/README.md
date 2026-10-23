@@ -16,12 +16,14 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Defaults: `DATA_MODE=mock`, `AI_ENABLED=false`, `AI_PROVIDER=snowflake_cortex`. These return explicitly simulated Pomona records and labeled deterministic fallback recommendations. No local model server/download or proprietary external AI API is used. Live data errors never substitute mock records. `.env` and its variants are ignored; `.env.example` contains placeholders only.
+Defaults: `DATA_MODE=local`, `AI_ENABLED=false`, `AI_PROVIDER=snowflake_cortex`. Local mode analyzes the real LA-area Overture places in `../data/la_places.csv.gz` (permanently closed places excluded; the first request loads the file in about 1.5 s), so no credentials are needed. `DATA_MODE=mock` returns explicitly simulated Pomona records; `DATA_MODE=live` queries the Snowflake view (`sql/waypoint_places_view.sql` builds one over `WAYPOINT.PUBLIC.LA_PLACES`), and `LOCAL_FALLBACK=true` falls back to the local export, labeled, if Snowflake fails. Without Cortex, recommendations are labeled deterministic fallbacks. No local model server/download or proprietary external AI API is used. `.env` and its variants are ignored; `.env.example` contains placeholders only.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m pip check
 ```
+
+`POST /api/chat` takes `messages` (role `user`/`assistant`, up to 40) and an optional plain-text `context` of neighborhood facts (the site sends the user's last search), and answers with Cortex `AI_COMPLETE` when `AI_ENABLED=true`. It returns `reply`, `source` (`open_weight_model`, `cortex_ai` or `fallback`) and `warnings`; without Cortex it replies with the supplied facts and says the model isn't running. `POST /api/agent/chat` is the saved Cortex Agent path, which needs published location context.
 
 Open http://127.0.0.1:8000/docs for executable API documentation and `/openapi.json` for the authoritative schema. The existing frontend was not changed. Backend CORS defaults to local Vite origins; server-side Streamlit HTTP calls also work. This trusted-local-demo MVP has no authentication or tenant isolation. Use account row-access controls and deployment authentication before serving multiple owners or exposing it publicly.
 

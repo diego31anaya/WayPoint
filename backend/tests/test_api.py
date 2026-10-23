@@ -15,7 +15,7 @@ def test_mock_end_to_end(request_data):
     response = client.post('/api/analyze', json=request_data)
     assert response.status_code == 200
     body = response.json()
-    assert body['metrics']['competitor_count'] == 2
+    assert body['metrics']['competitor_count'] == 3
     assert len(body['recommendations']) == 3
     assert body['metadata']['simulated'] is True
     assert body['metadata']['recommendation_source'] == 'deterministic_fallback'

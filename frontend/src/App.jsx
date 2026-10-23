@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import AccountControl from './components/AccountControl'
 import ChatNavButton from './components/ChatNavButton'
 import AccountPage from './pages/AccountPage'
+import AboutDataPage from './pages/AboutDataPage'
 import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
@@ -87,7 +88,8 @@ function App() {
   const [radius, setRadius] = useState('3')
   const [message, setMessage] = useState('')
   const [activeSearch, setActiveSearch] = useState(null)
-  const [currentPage, setCurrentPage] = useState('home')
+  // #about-the-data opens the data story directly (handy for demos and slides).
+  const [currentPage, setCurrentPage] = useState(() => (window.location.hash === '#about-the-data' ? 'about' : 'home'))
   const [returnPage, setReturnPage] = useState('home')
   const [brief, setBrief] = useState(null)
 
@@ -144,6 +146,27 @@ function App() {
     setCurrentPage('neighborhood')
   }
 
+  function openAbout(event) {
+    event?.preventDefault()
+    setCurrentPage('about')
+    window.scrollTo(0, 0)
+  }
+
+  if (currentPage === 'about') {
+    return (
+      <AboutDataPage
+        user={currentUser}
+        onBack={() => { setCurrentPage('home'); window.scrollTo(0, 0) }}
+        onExplore={() => {
+          setCurrentPage('home')
+          requestAnimationFrame(() => document.getElementById('get-started')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+        }}
+        onCreateAccount={handleCreateAccount}
+        onOpenDashboard={() => setCurrentPage('dashboard')}
+      />
+    )
+  }
+
   if (currentPage === 'account') {
     return (
       <AccountPage
@@ -157,7 +180,7 @@ function App() {
   }
 
   if (currentPage === 'chat' && currentUser) {
-    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
+    return <ChatPage user={currentUser} search={activeSearch} onBack={() => setCurrentPage(chatReturnPage)} />
   }
 
   if (currentPage === 'dashboard') {
@@ -210,6 +233,7 @@ function App() {
         <nav className="main-nav" aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#insights">What you’ll see</a>
+          <a href="#about-the-data" onClick={openAbout}>About the data</a>
         </nav>
         <div className="home-header-actions">
           {currentUser && <ChatNavButton onClick={handleOpenChat} />}
@@ -319,7 +343,7 @@ function App() {
 
       <footer className="site-footer page-shell">
         <a className="brand" href="#home" aria-label="WayPoint home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>WayPoint</span></a>
-        <span>Built for the businesses that make a neighborhood.</span>
+        <span>Built for the businesses that make a neighborhood. <a href="#about-the-data" className="footer-about" onClick={openAbout}>About the data</a></span>
         <a href="#home" className="back-top">Back to top ↑</a>
       </footer>
       </main>

@@ -168,3 +168,4 @@ h2 { font-family: var(--serif); font-size: 40px; line-height: 1.08; letter-spaci
   .trust-inner { gap: 9px 12px; }
   .data-source { font-size: 8px; }
 }
+.footer-about { margin-left: 10px; color: var(--green); font-weight: 700; text-decoration: none; }

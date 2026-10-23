@@ -13,7 +13,7 @@ class OpportunityMapService:
 
     def get_map(self, request):
         s = self.settings
-        metadata = {'data_source': 'mock' if s.data_mode == 'mock' else 'snowflake',
+        metadata = {'data_source': {'live': 'snowflake'}.get(s.data_mode, s.data_mode),
             'simulated': s.data_mode == 'mock', 'resolution': request.resolution,
             'grid_disk_k': request.grid_disk_k, 'dataset_release': s.dataset_release,
             'score_formula': '100*(0.4/(1+density/5)+0.6*complements/(complements+5))',
@@ -22,6 +22,10 @@ class OpportunityMapService:
                 'Demographics and survival probabilities are unavailable. No model calls are made per cell.']}
         if s.data_mode == 'mock':
             metadata['limitations'].append('Mock mode has no H3 geometry fixtures; an empty feature collection is intentional, not a real empty neighborhood.')
+            return OpportunityMapResponse(features=[], metadata=metadata)
+        if s.data_mode == 'local':
+            metadata['limitations'].append('Local mode computes no per-request H3 cells; the site uses the precomputed '
+                                           'heatmap in frontend/public/data/heat (data/heatmap.py). Set DATA_MODE=live for this map.')
             return OpportunityMapResponse(features=[], metadata=metadata)
         if not s.snowflake_mapping_verified:
             raise DataUnavailable('Verify the canonical Snowflake places view before requesting an opportunity map.')

@@ -1,5 +1,6 @@
 from typing import Annotated, Literal
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from app.data.category_groups import CAFE, RESTAURANT
 
 Text = Annotated[str, Field(min_length=1, max_length=300, pattern=r'\S')]
 BusinessGoal = Literal['Attract more customers', 'Stand out from competitors',
@@ -7,16 +8,18 @@ BusinessGoal = Literal['Attract more customers', 'Stand out from competitors',
     'Explore opening a new location', 'Understand the local market']
 BUSINESS_GOALS = list(BusinessGoal.__args__)
 
+# Competitors use the data layer's groups (data/categories.py), so counts match the frontend:
+# coffee shops and bakeries both compete within its "cafe" group (coffee, tea, bakery, dessert, juice).
 CATEGORIES = {
-    'coffee_shop': ['coffee_shop', 'cafe'],
-    'restaurant': ['restaurant'],
-    'bakery': ['bakery'],
+    'coffee_shop': list(CAFE),
+    'restaurant': list(RESTAURANT),
+    'bakery': list(CAFE),
     'bookstore': ['bookstore', 'book_store'],
 }
 COMPLEMENTS = {
     'coffee_shop': ['school', 'college', 'university', 'library', 'bookstore', 'office'],
     'restaurant': ['office', 'hotel', 'theatre', 'cinema'],
-    'bakery': ['coffee_shop', 'cafe', 'school', 'office'],
+    'bakery': ['school', 'college', 'university', 'office'],
     'bookstore': ['school', 'college', 'university', 'library', 'coffee_shop', 'cafe'],
 }
 
@@ -126,7 +129,7 @@ class RecommendationBatch(StrictModel):
 
 
 class Metadata(StrictModel):
-    data_source: Literal['mock', 'snowflake']
+    data_source: Literal['local', 'mock', 'snowflake']
     simulated: bool
     dataset: str = 'Overture Maps Places'
     dataset_release: str
@@ -152,6 +155,23 @@ class AnalysisResponse(StrictModel):
     neighborhood_insights: NeighborhoodInsights | None = None
     location_summary: 'LocationExplanation | None' = None
     score_explanation: 'LocationExplanation | None' = None
+
+
+class ChatMessage(StrictModel):
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class ChatRequest(StrictModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+    # Plain-text neighborhood facts from the frontend (ZIP, business type, numbers). Untrusted data.
+    context: str = Field(default='', max_length=4000)
+
+
+class ChatResponse(StrictModel):
+    reply: str
+    source: Literal['open_weight_model', 'cortex_ai', 'fallback']
+    warnings: list[str]
 
 
 class ExplanationContent(StrictModel):

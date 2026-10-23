@@ -4,10 +4,18 @@ from contextlib import closing
 from app.schemas import Business, CATEGORIES
 from app.services.analytics_service import from_businesses, get_competitor_metrics
 from app.data.demo_data import demo_businesses
+from app.data.local_places import nearby_businesses
 
 
 class DataUnavailable(Exception):
     pass
+
+
+def offline_analysis(request, map_limit, mock=False, map_categories=None):
+    """Analysis from the synthetic fixtures (mock) or the local export of LA places."""
+    rows = demo_businesses(request) if mock else nearby_businesses(request)
+    markers = [b for b in rows if map_categories is None or b.category in map_categories]
+    return markers[:map_limit], from_businesses(request, rows)
 
 
 def identifier(value):
@@ -52,7 +60,7 @@ class SnowflakeService:
         self.schema_checked_at = time.monotonic()
 
     def check_availability(self):
-        if self.settings.data_mode == 'mock':
+        if self.settings.data_mode in ('mock', 'local'):
             return 'not_used'
         if not self.settings.snowflake_mapping_verified:
             return 'mapping_required'
@@ -74,10 +82,8 @@ class SnowflakeService:
 
     def analyze(self, request, map_categories=None):
         s = self.settings
-        if s.data_mode == 'mock':
-            rows = demo_businesses(request)
-            markers = [b for b in rows if map_categories is None or b.category in map_categories]
-            return markers[:s.map_limit], from_businesses(request, rows)
+        if s.data_mode in ('mock', 'local'):
+            return offline_analysis(request, s.map_limit, s.data_mode == 'mock', map_categories)
         if not s.snowflake_mapping_verified:
             raise DataUnavailable('Live data mapping has not been verified. Ask the data lead to configure the canonical view.')
         try:

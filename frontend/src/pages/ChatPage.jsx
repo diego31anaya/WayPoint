@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { sendChat } from '../services/api'
+import { buildBrief, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './ChatPage.css'
 
 const STORAGE_KEY = 'waypoint-chat-history-v1'
@@ -18,11 +20,27 @@ function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-function ChatPage({ user, onBack }) {
+// Plain-text facts about the user's last search, sent with each message so answers stay grounded.
+async function describeSearch(search) {
+  const header = `Business type: ${search.businessType}. ZIP code: ${search.zipCode}. Search radius: ${search.radiusMiles} mi.`
+  const [zipData, index] = await Promise.all([fetchZipData(search.zipCode), fetchDataIndex().catch(() => null)])
+  if (!zipData) return `${header}\nThis ZIP code is outside WayPoint's Los Angeles-area data.`
+  const ideas = buildBrief(zipData, index, matchCategory(search.businessType), dataRadius(search.radiusMiles))
+  return [header, ...ideas.map((idea) => `- ${idea.title}: ${idea.description}`)].join('\n')
+}
+
+function ChatPage({ user, search, onBack }) {
   const storageKey = `${STORAGE_KEY}:${user?.email?.toLowerCase() ?? 'demo'}`
   const [chats, setChats] = useState(() => loadChats(storageKey))
   const [activeChatId, setActiveChatId] = useState(() => loadChats(storageKey)[0]?.id ?? null)
   const [draft, setDraft] = useState('')
+  const [pending, setPending] = useState(false)
+  const [context, setContext] = useState('')
+
+  useEffect(() => {
+    if (!search) return
+    describeSearch(search).then(setContext).catch(() => setContext(''))
+  }, [search])
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) ?? null, [chats, activeChatId])
 
   useEffect(() => {
@@ -40,27 +58,42 @@ function ChatPage({ user, onBack }) {
     setDraft('')
   }
 
-  function sendMessage(event) {
-    event.preventDefault()
-    const text = draft.trim()
-    if (!text) return
-
-    const chatId = activeChatId ?? createId()
-    const now = new Date().toISOString()
-    const userMessage = { id: createId(), role: 'user', content: text, createdAt: now }
-    const assistantMessage = { id: createId(), role: 'assistant', content: 'Message recieved', createdAt: new Date().toISOString() }
+  function appendMessage(chatId, message, title) {
     setChats((current) => {
       const existing = current.find((chat) => chat.id === chatId)
       if (!existing) {
-        return [{ id: chatId, title: text.slice(0, 48), createdAt: now, messages: [userMessage, assistantMessage] }, ...current]
+        return [{ id: chatId, title: title.slice(0, 48), createdAt: message.createdAt, messages: [message] }, ...current]
       }
       return [
-        { ...existing, title: existing.messages.length ? existing.title : text.slice(0, 48), createdAt: now, messages: [...existing.messages, userMessage, assistantMessage] },
+        { ...existing, title: existing.messages.length ? existing.title : title.slice(0, 48), messages: [...existing.messages, message] },
         ...current.filter((chat) => chat.id !== chatId),
       ]
     })
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault()
+    const text = draft.trim()
+    if (!text || pending) return
+
+    const chatId = activeChatId ?? createId()
+    const userMessage = { id: createId(), role: 'user', content: text, createdAt: new Date().toISOString() }
+    const history = [...(chats.find((chat) => chat.id === chatId)?.messages ?? []), userMessage]
+      .slice(-20)
+      .map(({ role, content }) => ({ role, content: content.slice(0, 4000) }))
+    appendMessage(chatId, userMessage, text)
     setActiveChatId(chatId)
     setDraft('')
+    setPending(true)
+
+    let content
+    try {
+      content = (await sendChat(history, context)).reply
+    } catch {
+      content = 'I couldn’t reach the WayPoint backend. Start it with the command in the README, then try again.'
+    }
+    appendMessage(chatId, { id: createId(), role: 'assistant', content, createdAt: new Date().toISOString() }, text)
+    setPending(false)
   }
 
   return (
@@ -98,6 +131,9 @@ function ChatPage({ user, onBack }) {
                   <p>{item.content}</p>
                 </article>
               ))}
+              {pending && activeChat?.id === activeChatId && (
+                <article className="chat-message assistant"><span className="chat-message-avatar">W</span><p className="chat-typing">Thinking…</p></article>
+              )}
             </div>
           ) : (
             <div className="chat-empty-state">
@@ -114,9 +150,9 @@ function ChatPage({ user, onBack }) {
         <div className="chat-compose-wrap">
           <form className="chat-compose" onSubmit={sendMessage}>
             <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
-            <button type="submit" disabled={!draft.trim()} aria-label="Send message">↑</button>
+            <button type="submit" disabled={!draft.trim() || pending} aria-label="Send message">↑</button>
           </form>
-          <p className="chat-compose-note">Chats are saved in this browser. Assistant responses are a preview.</p>
+          <p className="chat-compose-note">Chats are saved in this browser.{search ? ` Answers use your search: ${search.businessType} in ${search.zipCode}.` : ' Explore a ZIP code first for answers about your neighborhood.'}</p>
         </div>
       </section>
     </main>

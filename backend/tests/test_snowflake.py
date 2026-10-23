@@ -1,3 +1,4 @@
+from app.data.category_groups import CAFE
 from unittest.mock import MagicMock
 import pytest
 from app.config import Settings
@@ -46,8 +47,8 @@ def test_filtered_markers_use_bound_categories(analysis_request):
     cursor.fetchall.side_effect = [CANONICAL_SCHEMA, []]
     SnowflakeService(live_settings(), MagicMock(return_value=connection)).get_nearby_businesses(analysis_request, 'coffee_shop')
     sql, params = cursor.execute.call_args.args
-    assert 'CATEGORY IN (%s,%s)' in sql
-    assert params[-3:] == ('coffee_shop', 'cafe', 200)
+    assert 'CATEGORY IN (' + ','.join(['%s'] * len(CAFE)) + ')' in sql
+    assert params[-len(CAFE) - 1:] == (*CAFE, 200)
 
 
 def test_schema_cache(analysis_request):

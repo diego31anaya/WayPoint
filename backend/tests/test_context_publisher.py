@@ -21,5 +21,5 @@ def test_publisher_binds_context_and_commits(analysis_request, monkeypatch):
     context = publish_context(settings, analysis_request, "shop'", 'a', MagicMock(return_value=connection))
     sql, params = cursor.execute.call_args.args
     assert "shop'" not in sql and params[:2] == ("shop'", 'a')
-    assert context.metrics.competitor_count == 2
+    assert context.metrics.competitor_count == 3  # coffee A, coffee B, bakery
     connection.commit.assert_called_once()
