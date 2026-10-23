@@ -27,6 +27,8 @@ cd frontend && npm install && npm run dev      # http://localhost:5173
 
 Tests: `cd backend && .venv/bin/python -m pytest -q`, and `cd frontend && npm run lint && npm run build`.
 
+**Before presenting:** with both servers running, `bash scripts/smoke_demo.sh` checks the rehearsed 91768 journey end to end.
+
 **Demo shortcuts:** `http://localhost:5173/#demo` opens the rehearsed search (coffee shop, 91768, 2 miles). `#about-the-data` opens the data story.
 
 ## License and credits
