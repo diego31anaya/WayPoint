@@ -14,6 +14,7 @@ from .categories import friendly_category
 HERE = Path(__file__).parent
 CACHE = HERE / "cache"
 SAMPLE = HERE / "sample_places.csv"
+CHAINS = HERE / "ca_chains.csv"  # from WAYPOINT.PUBLIC.CA_CHAINS, built with CoCo
 TABLE = os.environ.get("PLACES_TABLE", "OVERTURE_MAPS_PLACES.CARTO.PLACE")
 MIN_CONFIDENCE = 0.7  # a guess; tune after looking at the pins
 CONTRACT = ["name", "category", "lat", "lon", "is_independent", "hidden_gem_score"]
@@ -22,6 +23,7 @@ CONTRACT = ["name", "category", "lat", "lon", "is_independent", "hidden_gem_scor
 WEIGHTS = {"independent": 0.5, "few_chains": 0.2, "rarity": 0.2, "confidence": 0.1}
 CHAIN_RADIUS_M = 500
 CHAIN_NAME_REPEATS = 3
+CA_CHAIN_MIN_LOCATIONS = 10  # unbranded names need 10+ CA locations; 5 catches common independent names
 
 QUERY = f"""
 SELECT
@@ -102,6 +104,19 @@ def fetch_raw(lat, lon, radius_m):
     return df[haversine_m(lat, lon, df.lat, df.lon) <= radius_m].reset_index(drop=True)
 
 
+def name_key(col):
+    return col.str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+
+
+def ca_chain_keys():
+    if not CHAINS.exists():
+        return set()
+    c = pd.read_csv(CHAINS)
+    c.columns = c.columns.str.lower()
+    keep = (c["branded_locations"] > 0) | (c["locations"] >= CA_CHAIN_MIN_LOCATIONS)
+    return set(c.loc[keep, "name_key"].astype(str))
+
+
 def clean(raw):
     df = raw.dropna(subset=["name", "lat", "lon"]).copy()
     df["name"] = df["name"].str.strip()
@@ -118,14 +133,14 @@ def score(df):
     """Add is_independent and hidden_gem_score. Proxies, not measured demand."""
     if df.empty:
         return df.assign(is_independent=pd.Series(dtype=bool), hidden_gem_score=pd.Series(dtype=float))
-    key = lambda col: col.str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-    name_key = key(df["name"])
-    repeats = name_key.value_counts()
-    # Chain names = tagged brands + names seen 3+ times; then also catch untagged
-    # variants like "Starbucks Coffee Company" by prefix.
-    chain_keys = set(key(df["brand"].dropna())) | set(repeats[repeats >= CHAIN_NAME_REPEATS].index)
-    prefixes = tuple(k for k in chain_keys if len(k) >= 5)
-    is_chain = df["brand"].notna() | name_key.isin(chain_keys) | name_key.str.startswith(prefixes)
+    keys = name_key(df["name"])
+    repeats = keys.value_counts()
+    # Chain names = tagged brands + names seen 3+ times here + names common across CA;
+    # local chain names also match by prefix ("Starbucks Coffee Company").
+    local = set(name_key(df["brand"].dropna())) | set(repeats[repeats >= CHAIN_NAME_REPEATS].index)
+    prefixes = tuple(k for k in local if len(k) >= 5)
+    is_chain = (df["brand"].notna() | keys.isin(local | ca_chain_keys())
+                | keys.str.startswith(prefixes))
     df["is_independent"] = ~is_chain
 
     chains = df[is_chain]

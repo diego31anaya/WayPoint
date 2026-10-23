@@ -6,7 +6,9 @@ Find independent local businesses ("hidden gems") near you, plus owner-view numb
 
 ### Dataset
 - **Overture Maps - Places**, via the **CARTO** listing on the Snowflake Marketplace (installed as `OVERTURE_MAPS_PLACES.CARTO.PLACE`).
-- Place data © [Overture Maps Foundation](https://overturemaps.org), distributed by [CARTO](https://carto.com). Thanks to both.
+- **SafeGraph US Open Census Data & Neighborhood Insights (free)**, Snowflake Marketplace: ACS 2019 5-year estimates per census block group. `data/demographics.csv` holds the 48 block groups within 5 km of CPP: population (B01003e1), median age (B01002e1), median household income (B19013e1), and the count of businesses in each block group (block group shapes from `2019_CBG_GEOMETRY`).
+- `data/ca_chains.csv`: 10,608 business names that appear at 5+ California locations in Overture, built in Snowflake with CoCo (`WAYPOINT.PUBLIC.CA_CHAINS`).
+- Place data © [Overture Maps Foundation](https://overturemaps.org), distributed by [CARTO](https://carto.com). Census data via [SafeGraph](https://www.safegraph.com). Thanks to all three.
 
 ### Setup
 ```bash
@@ -40,7 +42,7 @@ Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon,
   - `shopping` → **retail**
   - `services_and_business`, `lifestyle_services` → **services**, minus non-walk-in groups (B2B, offices, contractors, real estate, legal, ATMs)
   - Everything else (health care, schools, parks, government, …) is dropped. In the Pomona extract that leaves 883 of 1,651 places.
-- **Chain** = has an Overture brand (`BRAND:names:primary`), **or** the same name appears 3+ times in the area, **or** the name starts with one of those chain names (catches "Starbucks Coffee Company"). `is_independent` is the opposite. Only ~10% of places carry a brand tag, so the name rules do most of the work.
+- **Chain** = has an Overture brand (`BRAND:names:primary`), **or** the same name appears 3+ times in the area, **or** the name starts with one of those chain names (catches "Starbucks Coffee Company"), **or** the name is in `ca_chains.csv` with a brand tag somewhere or 10+ California locations (catches a lone Peet's). `is_independent` is the opposite. Only ~10% of places carry a brand tag, so the name rules do most of the work.
 - **hidden_gem_score** = 0.5 × independent + 0.2 × few chains nearby + 0.2 × category rarity + 0.1 × confidence
   - few chains nearby = 1 / (1 + chain locations within 500 m)
   - category rarity = how uncommon the place's Overture category is in the area (1 = rarest, 0 = most common)
@@ -48,5 +50,6 @@ Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon,
 
 ### Limitations
 - Scores are **proxies, not measured demand**: no foot traffic, reviews, or sales data.
-- Overture coverage and brand tags are incomplete; a chain with one untagged location nearby (e.g. a lone Peet's) looks independent.
+- Overture coverage and brand tags are incomplete; a small regional chain with under 10 untagged California locations still looks independent.
+- Census figures are 2019 ACS estimates; some block groups (e.g. the CPP campus) have no median income.
 - The 0.7 confidence cutoff and score weights are hand-picked.
