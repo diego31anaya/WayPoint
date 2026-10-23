@@ -14,7 +14,7 @@ from .categories import friendly_category
 HERE = Path(__file__).parent
 CACHE = HERE / "cache"
 SAMPLE = HERE / "sample_places.csv"
-TABLE = os.environ.get("PLACES_TABLE", "OVERTURE_MAPS__PLACES.CARTO.PLACE")
+TABLE = os.environ.get("PLACES_TABLE", "OVERTURE_MAPS_PLACES.CARTO.PLACE")
 MIN_CONFIDENCE = 0.7  # a guess; tune after looking at the pins
 CONTRACT = ["name", "category", "lat", "lon", "is_independent", "hidden_gem_score"]
 
@@ -25,18 +25,22 @@ CHAIN_NAME_REPEATS = 3
 
 QUERY = f"""
 SELECT
-  ID                          AS id,
-  NAMES:primary::string       AS name,
-  CATEGORIES:primary::string  AS category,
-  BRAND:names:primary::string AS brand,
-  CONFIDENCE                  AS confidence,
-  ST_Y(GEOMETRY)              AS lat,
-  ST_X(GEOMETRY)              AS lon
+  ID                            AS id,
+  NAMES:primary::string         AS name,
+  TAXONOMY:primary::string      AS category,
+  TAXONOMY:hierarchy[0]::string AS top_category,
+  TAXONOMY:hierarchy[1]::string AS sub_category,
+  BRAND:names:primary::string   AS brand,
+  CONFIDENCE                    AS confidence,
+  ST_Y(GEOMETRY)                AS lat,
+  ST_X(GEOMETRY)                AS lon
 FROM {TABLE}
-WHERE ST_Y(GEOMETRY) BETWEEN %(lat_lo)s AND %(lat_hi)s
-  AND ST_X(GEOMETRY) BETWEEN %(lon_lo)s AND %(lon_hi)s
+WHERE BBOX:xmin BETWEEN %(lon_lo)s AND %(lon_hi)s
+  AND BBOX:ymin BETWEEN %(lat_lo)s AND %(lat_hi)s
   AND ST_DWITHIN(GEOMETRY, ST_MAKEPOINT(%(lon)s, %(lat)s), %(radius_m)s)
   AND CONFIDENCE > %(min_conf)s
+  AND TAXONOMY:hierarchy[0]::string IN
+      ('food_and_drink', 'shopping', 'services_and_business', 'lifestyle_services')
 """
 
 
@@ -81,7 +85,7 @@ def query_snowflake(lat, lon, radius_m):
 
 
 def fetch_raw(lat, lon, radius_m):
-    """Raw extract rows (id, name, category, brand, confidence, lat, lon) for an area."""
+    """Raw extract rows (columns of data/sql/extract.sql) for an area."""
     path = CACHE / f"{lat:.4f}_{lon:.4f}_{int(radius_m)}.csv"
     if path.exists():
         return pd.read_csv(path)
@@ -105,7 +109,8 @@ def clean(raw):
     df = df.drop_duplicates(subset="id") if "id" in df else df
     df = df.drop_duplicates(subset=["name", "lat", "lon"])
     df["raw_category"] = df["category"]
-    df["category"] = df["raw_category"].map(friendly_category)
+    df["category"] = [friendly_category(t, s, p) for t, s, p in
+                      zip(df["top_category"], df["sub_category"], df["raw_category"])]
     return df.dropna(subset=["category"]).reset_index(drop=True)
 
 
@@ -113,8 +118,14 @@ def score(df):
     """Add is_independent and hidden_gem_score. Proxies, not measured demand."""
     if df.empty:
         return df.assign(is_independent=pd.Series(dtype=bool), hidden_gem_score=pd.Series(dtype=float))
-    name_key = df["name"].str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-    is_chain = df["brand"].notna() | (name_key.map(name_key.value_counts()) >= CHAIN_NAME_REPEATS)
+    key = lambda col: col.str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    name_key = key(df["name"])
+    repeats = name_key.value_counts()
+    # Chain names = tagged brands + names seen 3+ times; then also catch untagged
+    # variants like "Starbucks Coffee Company" by prefix.
+    chain_keys = set(key(df["brand"].dropna())) | set(repeats[repeats >= CHAIN_NAME_REPEATS].index)
+    prefixes = tuple(k for k in chain_keys if len(k) >= 5)
+    is_chain = df["brand"].notna() | name_key.isin(chain_keys) | name_key.str.startswith(prefixes)
     df["is_independent"] = ~is_chain
 
     chains = df[is_chain]

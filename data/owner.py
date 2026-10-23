@@ -3,7 +3,7 @@ import math
 
 from .db import clean, fetch_raw, get_places, haversine_m
 
-CITY_RADIUS_M = 10_000
+CITY_RADIUS_M = 5_000  # matches the sample extract; raise when querying live
 
 
 def competitors(category, lat, lon, radius_m=1000):

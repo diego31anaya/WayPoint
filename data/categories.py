@@ -1,86 +1,31 @@
-"""Map Overture primary categories to the four friendly ones in the data contract."""
+"""Map Overture taxonomy to the four friendly categories in the data contract.
+
+Overture's TAXONOMY:hierarchy starts with a top-level group (food_and_drink,
+shopping, ...) then a subgroup; TAXONOMY:primary is the most specific category.
+"""
 
 FRIENDLY = ("cafe", "restaurant", "retail", "services")
 
-# Exact matches win; checked before the keyword rules below.
-EXACT = {
-    "cafe": "cafe",
-    "coffee_shop": "cafe",
-    "tea_room": "cafe",
-    "bubble_tea": "cafe",
-    "bakery": "cafe",
-    "dessert_shop": "cafe",
-    "donuts": "cafe",
-    "juice_bar": "cafe",
-    "ice_cream_shop": "cafe",
-    "bar": "restaurant",
-    "pub": "restaurant",
-    "fast_food_restaurant": "restaurant",
-    "food_truck": "restaurant",
-    "pizza_restaurant": "restaurant",
-    "sandwich_shop": "restaurant",
-    "grocery_store": "retail",
-    "convenience_store": "retail",
-    "supermarket": "retail",
-    "pharmacy": "retail",
-    "florist": "retail",
-    "bookstore": "retail",
-    "gas_station": "services",
-    "hotel": "services",
-    "gym": "services",
-    "bank_credit_union": "services",
-    "laundromat": "services",
-    "dry_cleaning": "services",
+TOP = {
+    "shopping": "retail",
+    "services_and_business": "services",
+    "lifestyle_services": "services",
 }
-
-# (substring, friendly) checked in order; first hit wins.
-KEYWORDS = (
-    ("coffee", "cafe"),
-    ("cafe", "cafe"),
-    ("bakery", "cafe"),
-    ("restaurant", "restaurant"),
-    ("food", "restaurant"),
-    ("grill", "restaurant"),
-    ("diner", "restaurant"),
-    ("steak", "restaurant"),
-    ("bbq", "restaurant"),
-    ("barbecue", "restaurant"),
-    ("burger", "restaurant"),
-    ("pizza", "restaurant"),
-    ("sushi", "restaurant"),
-    ("taco", "restaurant"),
-    ("store", "retail"),
-    ("shop", "retail"),
-    ("retail", "retail"),
-    ("market", "retail"),
-    ("boutique", "retail"),
-    ("salon", "services"),
-    ("barber", "services"),
-    ("spa", "services"),
-    ("repair", "services"),
-    ("service", "services"),
-    ("dentist", "services"),
-    ("doctor", "services"),
-    ("clinic", "services"),
-    ("lawyer", "services"),
-    ("insurance", "services"),
-    ("real_estate", "services"),
-    ("auto", "services"),
-    ("fitness", "services"),
-    ("studio", "services"),
-    ("tutor", "services"),
-    ("school", None),  # not a local business for our purposes
-)
+# Not walk-in local businesses; they swamped "services" in the Pomona extract.
+SKIP_SUBS = {"b2b_service", "technical_service", "corporate_or_business_office", "real_estate_service",
+             "home_service", "professional_service", "legal_service", "family_service"}
+SKIP_PRIMARY = {"atm", "money_transfer_service"}
+CAFE_SUBS = {"non_alcoholic_beverage_venue"}
+# Whole words only, so steakhouse doesn't match "tea".
+CAFE_WORDS = {"cafe", "coffee", "tea", "bakery", "donut", "dessert", "ice", "yogurt", "juice"}
 
 
-def friendly_category(raw):
+def friendly_category(top, sub=None, primary=None):
     """Return cafe/restaurant/retail/services, or None if the place is out of scope."""
-    if not isinstance(raw, str) or not raw:
+    if sub in SKIP_SUBS or primary in SKIP_PRIMARY:
         return None
-    raw = raw.lower()
-    if raw in EXACT:
-        return EXACT[raw]
-    for key, friendly in KEYWORDS:
-        if key in raw:
-            return friendly
-    return None
+    if top == "food_and_drink":
+        if sub in CAFE_SUBS or CAFE_WORDS & set(str(primary).split("_")):
+            return "cafe"
+        return "restaurant"
+    return TOP.get(top)
