@@ -1,6 +1,7 @@
 """Numbers for the presentation's data story, from the local LA export.
 
-Run from the repo root: python3 -m data.eda   (needs scipy)  ->  data/eda.json
+Run from the repo root: python3 -m data.eda   (needs scipy)  ->  data/eda.json, frontend/public/data/story.json
+(story.json adds the SBA/BLS figures in data/external_facts.json for the About the data page.)
 
 Closure = Overture operating_status: permanently_closed / (open + permanently_closed);
 places with no status are left out. Comparisons, not causes, and closures are under-reported.
@@ -15,6 +16,7 @@ from . import db
 from .categories import FRIENDLY, friendly_category
 
 OUT = db.HERE / "eda.json"
+STORY = db.HERE.parent / "frontend" / "public" / "data" / "story.json"  # read by the About the data page
 NEAR_M = 500
 COMPETITION_BUCKETS = [(0, 0, "0"), (1, 2, "1–2"), (3, 5, "3–5"), (6, 15, "6–15"), (16, 10**9, "16+")]
 
@@ -82,6 +84,8 @@ def main():
     out["ca_categories_1000plus"] = {"count": len(big), "most_durable": pick(big.head(6)), "least_durable": pick(big.tail(6)[::-1])}
 
     OUT.write_text(json.dumps(out, indent=1))
+    facts = json.loads((db.HERE / "external_facts.json").read_text())
+    STORY.write_text(json.dumps({"findings": out, "facts": facts}, separators=(",", ":")))
     print(json.dumps(out, indent=1))
 
 
