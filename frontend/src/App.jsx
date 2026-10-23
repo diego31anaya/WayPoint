@@ -1,121 +1,222 @@
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import './App.css'
 
+const recommendations = [
+  {
+    number: '01',
+    tag: 'NEARBY WORKPLACES',
+    title: 'Make lunch easy for local teams',
+    description:
+      'Explore a weekday catering menu for offices within your neighborhood.',
+    icon: '↗',
+  },
+  {
+    number: '02',
+    tag: 'LOCAL LANDSCAPE',
+    title: 'Find your own corner of coffee',
+    description:
+      'Look for product or service categories that appear less represented nearby.',
+    icon: '⌕',
+  },
+  {
+    number: '03',
+    tag: 'COMMUNITY MIX',
+    title: 'Build an offer for students',
+    description:
+      'Consider a study-friendly bundle around nearby schools and colleges.',
+    icon: '✳',
+  },
+]
+
+function NeighborhoodIllustration() {
+  return (
+    <div className="map-card" aria-label="Illustrative neighborhood map">
+      <div className="map-topline">
+        <span className="live-dot" />
+        <span>NEIGHBORHOOD SNAPSHOT</span>
+        <span className="map-zip">94612</span>
+      </div>
+      <div className="map-art" aria-hidden="true">
+        <svg viewBox="0 0 540 340" role="presentation">
+          <path className="park" d="M29 35 164 17l49 72-25 93-116 9-59-73z" />
+          <path className="block block-a" d="m245 22 91-8 18 60-77 38-52-23z" />
+          <path className="block block-b" d="m373 26 129 12-11 80-113 7-32-51z" />
+          <path className="block block-c" d="m31 231 113-27 43 80-40 40-104-16z" />
+          <path className="block block-d" d="m223 205 82-29 60 36-11 99-92 10-47-53z" />
+          <path className="block block-e" d="m391 163 104-17 28 85-47 81-87-16-25-64z" />
+          <path className="road" d="M-12 179c98-40 141-38 212-29s128 15 196-2 111-25 171-25" />
+          <path className="road road-secondary" d="M211-20c20 64 18 105 9 158s-5 117 20 223" />
+          <path className="road road-secondary" d="M371-11c-14 69-11 108 7 159s26 117 11 205" />
+          <path className="route" d="M114 263c35-57 68-77 111-87 35-8 65 1 102-26s55-54 87-73" />
+        </svg>
+        <span className="map-label label-park">WATERFRONT PARK</span>
+        <span className="map-label label-market">MARKET ST</span>
+        <span className="map-label label-campus">CIVIC CENTER</span>
+        <span className="pin pin-one"><i>☕</i></span>
+        <span className="pin pin-two"><i>☕</i></span>
+        <span className="pin pin-three"><i>⌂</i></span>
+        <span className="pin pin-four"><i>☕</i></span>
+        <span className="you-pin"><span />YOUR BUSINESS</span>
+      </div>
+      <div className="map-legend">
+        <span><i className="legend-dot competitor-dot" />Nearby businesses</span>
+        <span><i className="legend-dot you-dot" />Your location</span>
+      </div>
+      <div className="map-note">Illustrative map · sample view</div>
+    </div>
+  )
+}
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [businessType, setBusinessType] = useState('Coffee shop')
+  const [zipCode, setZipCode] = useState('')
+  const [radius, setRadius] = useState('3')
+  const [message, setMessage] = useState('')
+  const [activeSearch, setActiveSearch] = useState(null)
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    if (!businessType.trim()) {
+      setMessage('Enter your business type to get started.')
+      return
+    }
+    if (!/^\d{5}$/.test(zipCode)) {
+      setMessage('Enter a 5-digit ZIP code to get started.')
+      return
+    }
+    if (!radius || Number(radius) <= 0) {
+      setMessage('Enter a radius greater than 0 miles.')
+      return
+    }
+    setMessage('')
+    setActiveSearch({
+      businessType: businessType.trim(),
+      zipCode,
+      radiusMiles: Number(radius),
+    })
+  }
+
+  if (activeSearch) {
+    return <NeighborhoodScreen search={activeSearch} onBack={() => setActiveSearch(null)} />
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
+    <main>
+      <header className="site-header page-shell">
+        <a className="brand" href="#home" aria-label="WayPoint home">
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+          <span>WayPoint</span>
+        </a>
+        <nav className="main-nav" aria-label="Main navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#insights">What you’ll see</a>
+        </nav>
+        <a className="header-cta" href="#get-started">Explore your neighborhood <span>↗</span></a>
+      </header>
+
+      <section className="hero page-shell" id="home">
+        <div className="hero-copy">
+          <div className="eyebrow"><span className="eyebrow-star">✳</span> A clearer view of your corner of the world</div>
+          <h1>Good business<br />starts <em>around</em> you.</h1>
+          <p className="hero-description">
+            Understand the neighborhood around your business. Find the gaps, local patterns, and possibilities worth exploring.
           </p>
+          <form className="explore-form" id="get-started" onSubmit={handleSubmit}>
+            <div className="explore-fields">
+              <label className="form-field business-field" htmlFor="business-type">
+                <span>I run a</span>
+                <input id="business-type" type="text" placeholder="Business type" value={businessType} onChange={(event) => setBusinessType(event.target.value)} />
+              </label>
+              <label className="form-field" htmlFor="zip-code">
+                <span>Located in</span>
+                <input
+                  id="zip-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={5}
+                  placeholder="ZIP code"
+                  value={zipCode}
+                  onChange={(event) => setZipCode(event.target.value.replace(/\D/g, '').slice(0, 5))}
+                  aria-describedby={message ? 'form-message' : undefined}
+                />
+              </label>
+              <label className="form-field radius-field" htmlFor="radius">
+                <span>Within</span>
+                <span className="radius-input-wrap">
+                  <input id="radius" type="number" min="0.5" max="50" step="0.5" value={radius} onChange={(event) => setRadius(event.target.value)} />
+                  <span className="miles-suffix">mi</span>
+                </span>
+              </label>
+            </div>
+            <button type="submit">Explore my area <span>→</span></button>
+            {message && <p className="form-message" id="form-message" role="status">{message}</p>}
+          </form>
+          <div className="hero-footnote"><span>✦</span> Local context, made useful for independent businesses.</div>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+        <div className="hero-visual">
+          <div className="visual-spark spark-one">✳</div>
+          <div className="visual-spark spark-two">✳</div>
+          <NeighborhoodIllustration />
+          <div className="floating-note">
+            <span className="note-icon">↗</span>
+            <span><strong>See the bigger picture</strong><small>Local places · Census context · Patterns</small></span>
+          </div>
+          <div className="visual-caption">YOUR NEIGHBORHOOD, IN FOCUS</div>
         </div>
       </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <section className="trust-strip">
+        <div className="page-shell trust-inner">
+          <span className="trust-label">A neighborhood view, built from</span>
+          <span className="data-source"><b className="source-mark snowflake-mark">✳</b> Snowflake geospatial</span>
+          <span className="source-divider" />
+          <span className="data-source"><b className="source-mark">◎</b> Overture Places</span>
+          <span className="source-divider" />
+          <span className="data-source"><b className="source-mark census-mark">▥</b> Census data</span>
+        </div>
+      </section>
+
+      <section className="insights-section page-shell" id="insights">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">FROM LOCAL SIGNALS TO FRESH IDEAS</div>
+            <h2>See what your neighborhood<br />might be telling you.</h2>
+          </div>
+          <p>WayPoint brings nearby places and community context into one clear view, so your next move starts with better questions.</p>
+        </div>
+        <div className="insights-layout">
+          <div className="insight-panel">
+            <div className="panel-header"><span>AN EXAMPLE NEIGHBORHOOD BRIEF</span><span className="sample-pill">ILLUSTRATIVE</span></div>
+            <div className="brief-title"><span className="brief-icon">☕</span><span><strong>Independent coffee shop</strong><small>Example opportunities to investigate</small></span></div>
+            <div className="recommendation-list">
+              {recommendations.map((item) => (
+                <article className="recommendation" key={item.number}>
+                  <span className="recommendation-number">{item.number}</span>
+                  <div><span className="recommendation-tag">{item.tag}</span><h3>{item.title}</h3><p>{item.description}</p></div>
+                  <span className="recommendation-icon" aria-hidden="true">{item.icon}</span>
+                </article>
+              ))}
+            </div>
+            <p className="panel-footnote">Ideas are starting points based on available neighborhood indicators—not predictions of customer demand or sales.</p>
+          </div>
+          <aside className="how-card" id="how-it-works">
+            <span className="how-number">01 — 03</span>
+            <h3>Know the block.<br /><em>Spot the openings.</em></h3>
+            <p>We bring together public demographic context, nearby business locations, and other local indicators to help you explore where your business could fit.</p>
+            <a href="#get-started">Start with your ZIP code <span>→</span></a>
+            <div className="orbit-art" aria-hidden="true"><span className="orbit orbit-a" /><span className="orbit orbit-b" /><span className="orbit-center">b.</span><i className="orbit-node node-a" /><i className="orbit-node node-b" /><i className="orbit-node node-c" /></div>
+          </aside>
+        </div>
+      </section>
+
+      <footer className="site-footer page-shell">
+        <a className="brand" href="#home" aria-label="WayPoint home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>WayPoint</span></a>
+        <span>Built for the businesses that make a neighborhood.</span>
+        <a href="#home" className="back-top">Back to top ↑</a>
+      </footer>
+    </main>
   )
 }
 
