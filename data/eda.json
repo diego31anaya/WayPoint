@@ -1,0 +1,206 @@
+{
+ "places_in_export": 342541,
+ "places_with_status": 306120,
+ "overall_closure": [
+  0.0923,
+  28261,
+  306120
+ ],
+ "independent_vs_chain": {
+  "independent": [
+   0.1087,
+   27333,
+   251463
+  ],
+  "chain": [
+   0.017,
+   928,
+   54657
+  ]
+ },
+ "by_category": {
+  "cafe": {
+   "all": [
+    0.023,
+    248,
+    10792
+   ],
+   "independent": [
+    0.0345,
+    226,
+    6553
+   ],
+   "chain": [
+    0.0052,
+    22,
+    4239
+   ]
+  },
+  "restaurant": {
+   "all": [
+    0.0249,
+    1053,
+    42206
+   ],
+   "independent": [
+    0.0311,
+    921,
+    29594
+   ],
+   "chain": [
+    0.0105,
+    132,
+    12612
+   ]
+  },
+  "retail": {
+   "all": [
+    0.07,
+    4330,
+    61856
+   ],
+   "independent": [
+    0.0919,
+    4207,
+    45775
+   ],
+   "chain": [
+    0.0076,
+    123,
+    16081
+   ]
+  },
+  "services": {
+   "all": [
+    0.0847,
+    7314,
+    86313
+   ],
+   "independent": [
+    0.0963,
+    7054,
+    73232
+   ],
+   "chain": [
+    0.0199,
+    260,
+    13081
+   ]
+  }
+ },
+ "closure_by_competition_500m": {
+  "0": [
+   0.0242,
+   51,
+   2109
+  ],
+  "1\u20132": [
+   0.0346,
+   159,
+   4593
+  ],
+  "3\u20135": [
+   0.0403,
+   310,
+   7700
+  ],
+  "6\u201315": [
+   0.0489,
+   1564,
+   31954
+  ],
+  "16+": [
+   0.0702,
+   10861,
+   154810
+  ]
+ },
+ "income_terciles_usd": [
+  57000.0,
+  85000.0
+ ],
+ "closure_by_income": {
+  "lower": [
+   0.0626,
+   4192,
+   67015
+  ],
+  "middle": [
+   0.06,
+   4061,
+   67671
+  ],
+  "upper": [
+   0.0706,
+   4692,
+   66481
+  ]
+ },
+ "ca_categories_1000plus": {
+  "count": 163,
+  "most_durable": [
+   {
+    "category": "package_locker",
+    "closure_rate": 0.0006,
+    "places": 1687
+   },
+   {
+    "category": "flowers_and_gifts_store",
+    "closure_rate": 0.0011,
+    "places": 4660
+   },
+   {
+    "category": "arts_crafts_and_hobby_store",
+    "closure_rate": 0.0012,
+    "places": 1613
+   },
+   {
+    "category": "tattoo_and_piercing",
+    "closure_rate": 0.0013,
+    "places": 2966
+   },
+   {
+    "category": "shopping",
+    "closure_rate": 0.0026,
+    "places": 5699
+   },
+   {
+    "category": "specialty_foods_store",
+    "closure_rate": 0.0032,
+    "places": 1558
+   }
+  ],
+  "least_durable": [
+   {
+    "category": "print_media",
+    "closure_rate": 0.18,
+    "places": 2616
+   },
+   {
+    "category": "engineering_service",
+    "closure_rate": 0.1783,
+    "places": 8891
+   },
+   {
+    "category": "architectural_designer",
+    "closure_rate": 0.1773,
+    "places": 3136
+   },
+   {
+    "category": "financial_service",
+    "closure_rate": 0.1689,
+    "places": 18470
+   },
+   {
+    "category": "mortgage_lender",
+    "closure_rate": 0.1623,
+    "places": 5293
+   },
+   {
+    "category": "video_film_production",
+    "closure_rate": 0.1601,
+    "places": 1449
+   }
+  ]
+ }
+}
