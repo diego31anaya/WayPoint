@@ -1,5 +1,11 @@
-from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated, Literal
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+
+Text = Annotated[str, Field(min_length=1, max_length=300, pattern=r'\S')]
+BusinessGoal = Literal['Attract more customers', 'Stand out from competitors',
+    'Identify new products or services', 'Find partnership opportunities',
+    'Explore opening a new location', 'Understand the local market']
+BUSINESS_GOALS = list(BusinessGoal.__args__)
 
 CATEGORIES = {
     'coffee_shop': ['coffee_shop', 'cafe'],
@@ -16,7 +22,7 @@ COMPLEMENTS = {
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False, str_strip_whitespace=True)
 
 
 class Location(StrictModel):
@@ -25,11 +31,29 @@ class Location(StrictModel):
 
 
 class AnalysisRequest(StrictModel):
-    business_type: Literal['coffee_shop', 'restaurant', 'bakery', 'bookstore']
+    business_type: Literal['coffee_shop', 'restaurant', 'bakery', 'bookstore'] = Field(
+        validation_alias=AliasChoices('business_type', 'business_category', 'category'))
     location: Location
     radius_m: int = Field(default=1500, ge=100, le=5000)
-    business_goal: str = Field(default='Attract more customers', min_length=1, max_length=300)
-    owner_preferences: list[str] = Field(default_factory=list, max_length=10)
+    business_goal: Text = 'Attract more customers'
+    owner_preferences: list[Text] = Field(default_factory=list, max_length=10)
+    business_name: Text | None = None
+    business_description: str = Field(default='', max_length=2000)
+    products_and_services: list[Text] = Field(default_factory=list, max_length=30)
+    target_customers: list[Text] = Field(default_factory=list, max_length=20)
+    monthly_marketing_budget: float | None = Field(default=None, ge=0, le=1_000_000_000)
+    current_challenges: list[Text] = Field(default_factory=list, max_length=20)
+    existing_marketing_strategies: list[Text] = Field(default_factory=list, max_length=20)
+    business_stage: Literal['planning', 'newly_opened', 'established'] | None = None
+
+    @field_validator('business_type', mode='before')
+    @classmethod
+    def normalize_category(cls, value):
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace(' ', '_')
+        return {'cafe': 'coffee_shop', 'café': 'coffee_shop', 'coffee': 'coffee_shop',
+                'book_store': 'bookstore'}.get(normalized, normalized)
 
 
 class Business(StrictModel):
@@ -55,6 +79,8 @@ class Metrics(StrictModel):
     complementary_count: int
     total_businesses: int
     category_distribution: dict[str, int]
+    competitor_share: float = Field(default=0, ge=0, le=1)
+    unknown_category_count: int = Field(default=0, ge=0)
 
 
 class Signal(StrictModel):
@@ -62,6 +88,25 @@ class Signal(StrictModel):
     score: float = Field(ge=0, le=100)
     explanation: str
     evidence_ids: list[str]
+    contributing_metrics: list[Evidence] = Field(default_factory=list)
+
+
+class DataQuality(StrictModel):
+    mapped_record_count: int
+    classified_record_count: int
+    category_completeness: float | None
+    geographic_coverage: Literal['unknown'] = 'unknown'
+    confidence: Literal['insufficient', 'limited']
+    limitations: list[str]
+
+
+class NeighborhoodInsights(StrictModel):
+    complementary_categories: dict[str, int]
+    points_of_interest: list[Business]
+    nearest_competitors: list[Business]
+    marker_subset_only: bool
+    data_quality: DataQuality
+    limitations: list[str]
 
 
 class Recommendation(StrictModel):
@@ -69,9 +114,9 @@ class Recommendation(StrictModel):
     description: str = Field(min_length=1, max_length=800)
     reason: str = Field(min_length=1, max_length=800)
     supporting_evidence: list[Evidence] = Field(min_length=1, max_length=6)
-    action_steps: list[str] = Field(min_length=1, max_length=5)
+    action_steps: list[Text] = Field(min_length=1, max_length=5)
     priority: Literal['low', 'medium', 'high']
-    limitations: list[str] = Field(min_length=1)
+    limitations: list[Text] = Field(min_length=1, max_length=6)
 
 
 class RecommendationBatch(StrictModel):
@@ -100,3 +145,5 @@ class AnalysisResponse(StrictModel):
     opportunity_signals: list[Signal]
     recommendations: list[Recommendation]
     metadata: Metadata
+    business_information: AnalysisRequest | None = None
+    neighborhood_insights: NeighborhoodInsights | None = None

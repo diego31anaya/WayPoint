@@ -2,7 +2,7 @@ from app.schemas import Signal
 
 
 def score_opportunities(metrics):
-    if not metrics.total_businesses:
+    if not metrics.total_businesses or metrics.unknown_category_count == metrics.total_businesses:
         return []  # Absence of mapped records is not evidence of opportunity.
     low_pressure = 1/(1 + metrics.competitor_density_per_sq_km/5)
     complement = metrics.complementary_count/(metrics.complementary_count+5)
