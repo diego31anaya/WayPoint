@@ -11,6 +11,8 @@ ROWS = ('NAME,CATEGORY,TOP_CATEGORY,SUB_CATEGORY,BRAND,CONFIDENCE,OPERATING_STAT
         'Open Cafe,cafe,,,,0.9,open,34.0552,-117.7500,91768\n'
         'Unknown Status Shop,coffee_shop,,,,0.9,,34.0556,-117.7500,91768\n'
         'Closed Cafe,cafe,,,,0.9,permanently_closed,34.0553,-117.7500,91768\n'
+        'Low Confidence Cafe,cafe,,,,0.5,open,34.0554,-117.7500,91768\n'
+        'Open Cafe,cafe,,,,0.9,open,34.0552,-117.7500,91768\n'
         'Far Library,library,,,,0.9,open,35.0,-118.0,90001\n')
 
 
@@ -21,7 +23,7 @@ def write_places(tmp_path):
     return path
 
 
-def test_local_places_skip_closed_and_far(tmp_path, analysis_request):
+def test_local_places_filter_like_data_layer(tmp_path, analysis_request):
     path = write_places(tmp_path)
     load_places.cache_clear()
     names = [b.name for b in nearby_businesses(analysis_request, path)]

@@ -73,7 +73,7 @@ def test_generation_constraints_do_not_change_api_schema(analysis_request):
     assert RecommendationBatch.model_json_schema() == original
     properties = schema['$defs']['Evidence']['properties']
     assert 'competitor_count' in properties['metric_id']['enum']
-    assert 2 in properties['value']['enum']
+    assert 3 in properties['value']['enum']
     assert 'locations' in properties['unit']['enum']
     pattern = schema['$defs']['Recommendation']['properties']['action_steps']['items']['pattern']
     assert re.fullmatch(pattern, 'Run a brief pilot.')

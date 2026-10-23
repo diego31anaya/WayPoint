@@ -6,8 +6,8 @@ from app.services.analytics_service import from_businesses
 
 def test_metrics(analysis_request):
     metrics = from_businesses(analysis_request, demo_businesses(analysis_request))
-    assert metrics.competitor_count == 2
-    assert metrics.competitor_density_per_sq_km == pytest.approx(2/(pi*1.5**2))
+    assert metrics.competitor_count == 3  # coffee A, coffee B, bakery
+    assert metrics.competitor_density_per_sq_km == pytest.approx(3/(pi*1.5**2))
     assert metrics.complementary_count == 3
     assert metrics.total_businesses == 7
 

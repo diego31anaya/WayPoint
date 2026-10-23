@@ -11,15 +11,23 @@ from app.data.demo_data import distance_m
 from app.schemas import Business
 
 PLACES = Path(__file__).resolve().parents[3] / 'data' / 'la_places.csv.gz'
+MIN_CONFIDENCE = 0.7  # same cutoff as data/db.py
 
 
 @lru_cache(maxsize=1)
 def load_places(path=PLACES):
-    """(name, category, lat, lon) for every place not marked permanently closed."""
+    """(name, category, lat, lon) for places not permanently closed, filtered like the data layer
+    (data/db.py: confidence > MIN_CONFIDENCE, one row per name and location)."""
+    rows, seen = [], set()
     with gzip.open(path, 'rt', newline='', encoding='utf-8') as f:
-        return [(r['NAME'] or 'Unnamed business', r['CATEGORY'] or 'unknown', float(r['LAT']), float(r['LON']))
-                for r in csv.DictReader(f)
-                if r['OPERATING_STATUS'] != 'permanently_closed' and r['LAT'] and r['LON']]
+        for r in csv.DictReader(f):
+            key = (r['NAME'].strip(), r['LAT'], r['LON'])
+            if (r['OPERATING_STATUS'] == 'permanently_closed' or not r['LAT'] or not r['LON'] or not key[0]
+                    or float(r['CONFIDENCE'] or 0) <= MIN_CONFIDENCE or key in seen):
+                continue
+            seen.add(key)
+            rows.append((key[0], r['CATEGORY'] or 'unknown', float(r['LAT']), float(r['LON'])))
+    return rows
 
 
 def nearby_businesses(request, path=PLACES):

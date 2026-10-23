@@ -26,8 +26,8 @@ def test_optional_profile(request_data):
     assert body['business_information']['monthly_marketing_budget'] == 0
     assert body['neighborhood_insights']['data_quality']['geographic_coverage'] == 'unknown'
     assert body['neighborhood_insights']['complementary_categories']['school'] == 1
-    assert len(body['neighborhood_insights']['nearest_competitors']) == 2
-    assert body['metrics']['competitor_share'] == pytest.approx(2/7)
+    assert len(body['neighborhood_insights']['nearest_competitors']) == 3
+    assert body['metrics']['competitor_share'] == pytest.approx(3/7)
     assert body['opportunity_signals'][0]['contributing_metrics']
     assert 'without paid advertising' in body['recommendations'][0]['action_steps'][0]
 

@@ -452,7 +452,8 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
   useEffect(() => {
     if (!strategyType || !center) return undefined
     const controller = new AbortController()
-    fetchStrategies({ businessType: strategyType, center, radiusMiles: radius }, { signal: controller.signal })
+    // Same radius as the stat cards (1–3 mi), so both cite the same counts.
+    fetchStrategies({ businessType: strategyType, center, radiusMiles: dataRadius(radius) }, { signal: controller.signal })
       .then((data) => {
         data.recommendations.forEach((rec) => { rec.id = `strategy-${rec.title}`; rec.name = rec.title })
         setStrategies({ key: strategyKey, status: 'ready', data })
