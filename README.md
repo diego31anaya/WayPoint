@@ -36,6 +36,13 @@ get_places(34.0575, -117.8216, 2000, category="cafe")
 
 Owner view: `competitors(category, lat, lon, radius_m)`, `category_mix(lat, lon, radius_m)`, `gap_score(category, lat, lon, radius_m, city_radius_m=5000)`, `survival(category, lat, lon, radius_m)`. All return plain counts and ratios.
 
+### Frontend data
+`python3 -m data.export` writes two static files the React app can `fetch()` (no server needed):
+- `frontend/public/data/places.json`: the 883 places (contract columns) plus 43 permanently closed ones, with metadata (center, 5 km coverage, sources, score weights)
+- `frontend/public/data/insights.json`: owner numbers around CPP for each category at 1, 2 and 3 miles (competitors, nearest names, `gap_score`, `survival`), the 2-mile category mix, and the LA County findings
+
+In the app: `const data = await fetch('/data/places.json').then(r => r.json())`. Data only covers 5 km around CPP (ZIPs 91768, 91789, 91765).
+
 ### How the numbers are made
 - **Filtered to** places with Overture confidence > 0.7, then mapped from Overture's `TAXONOMY` to four friendly categories (`data/categories.py`):
   - `food_and_drink` → **cafe** (coffee, tea, bakeries, desserts, juice) or **restaurant** (everything else, bars included)
