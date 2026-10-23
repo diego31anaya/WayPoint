@@ -3,6 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
+import { backendBusinessType, fetchStrategies } from '../services/api'
 import { distanceInMiles, fetchNearbyPlaces, fetchZipBoundary, fetchZipCenter } from '../services/zipBoundary'
 import { buildBrief, CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
@@ -190,6 +191,37 @@ function IdeaCard({ idea, isSaved, onSave }) {
       <p>{idea.description}</p>
       <div className="business-card-footer"><SaveButton item={idea} isSaved={isSaved} onSave={onSave} /></div>
     </article>
+  )
+}
+
+const evidenceText = (e) => `${e.metric_id.replace('category_count:', '').replaceAll('_', ' ')}: ${Number.isInteger(e.value) ? e.value : e.value.toFixed(2)} ${e.unit}`
+
+function StrategyCard({ strategy, isSaved, onSave }) {
+  return (
+    <article className="business-card idea-card strategy-card">
+      <div className="business-card-top"><span className="business-number">{strategy.priority.toUpperCase()}</span><h2>{strategy.title}</h2></div>
+      <p>{strategy.description}</p>
+      <ol>{strategy.action_steps.map((step) => <li key={step}>{step}</li>)}</ol>
+      <div className="business-tags">{strategy.supporting_evidence.map((e) => <span key={e.metric_id}>{evidenceText(e)}</span>)}</div>
+      <div className="business-card-footer"><SaveButton item={strategy} isSaved={isSaved} onSave={onSave} /></div>
+    </article>
+  )
+}
+
+function Strategies({ result, businessType, isSaved, onSave }) {
+  if (!businessType) return <div className="business-list-status">Strategies cover coffee shops, restaurants, bakeries and bookstores.</div>
+  if (result.status === 'loading') return <div className="business-list-status">Building strategies for this neighborhood…</div>
+  if (result.status === 'error') return <div className="business-list-status">Strategy service offline. Start the backend (see README) for tailored strategies.</div>
+  const { recommendations, metadata } = result.data
+  if (!recommendations.length) return <div className="business-list-status">Not enough mapped businesses nearby for strategies.</div>
+  const source = metadata.recommendation_source === 'open_weight_model'
+    ? `Written by ${metadata.ai_model} from these numbers`
+    : 'Rule-based (the AI model isn’t running)'
+  return (
+    <>
+      <div className="business-list-status strategy-source">STRATEGIES TO TEST · {source}</div>
+      {recommendations.map((strategy) => <StrategyCard strategy={strategy} key={strategy.id} isSaved={isSaved(strategy)} onSave={onSave} />)}
+    </>
   )
 }
 
@@ -414,6 +446,23 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
     [data, index, category, radius],
   )
 
+  const strategyType = backendBusinessType(search.businessType, category)
+  const strategyKey = `${search.zipCode}-${radius}-${strategyType}-${center}`
+  const [strategies, setStrategies] = useState({ key: null })
+  useEffect(() => {
+    if (!strategyType || !center) return undefined
+    const controller = new AbortController()
+    fetchStrategies({ businessType: strategyType, center, radiusMiles: radius }, { signal: controller.signal })
+      .then((data) => {
+        data.recommendations.forEach((rec) => { rec.id = `strategy-${rec.title}`; rec.name = rec.title })
+        setStrategies({ key: strategyKey, status: 'ready', data })
+      })
+      .catch(() => { if (!controller.signal.aborted) setStrategies({ key: strategyKey, status: 'error' }) })
+    return () => controller.abort()
+  }, [strategyKey, strategyType, center, radius])
+  const strategyResult = strategies.key === strategyKey ? strategies : { status: 'loading' }
+  const strategyCount = strategyResult.status === 'ready' ? strategyResult.data.recommendations.length : 0
+
   const isSaved = (item) => saved.some((entry) => entry.id === item.id)
   function toggleSave(item) {
     setSaved((current) => (current.some((entry) => entry.id === item.id)
@@ -453,7 +502,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
         <aside className="business-results">
           <div className="results-tabs">
             <button className={activeTab === 'competitors' ? 'active' : ''} type="button" onClick={() => setActiveTab('competitors')}>Competitors <b>({matches})</b></button>
-            <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({ideas.length})</b></button>
+            <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({ideas.length + strategyCount})</b></button>
           </div>
           <div className="results-caption">
             {activeTab === 'recommended'
@@ -467,9 +516,15 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
                 {listed.map((business, i) => <BusinessCard business={business} index={i} key={business.id} isSaved={isSaved(business)} onSave={toggleSave} onSelectBusiness={setSelected} />)}
               </>
             )}
-            {activeTab === 'recommended' && (ideas.length
-              ? ideas.map((idea) => <IdeaCard idea={idea} key={idea.id} isSaved={isSaved(idea)} onSave={toggleSave} />)
-              : <div className="business-list-status">Recommendations need neighborhood data, which covers about 340 Los Angeles-area ZIP codes (try 91768).</div>)}
+            {activeTab === 'recommended' && (
+              <>
+                <Strategies result={strategyResult} businessType={strategyType} isSaved={isSaved} onSave={toggleSave} />
+                {ideas.length > 0 && <div className="business-list-status strategy-source">WHAT THE NUMBERS SAY</div>}
+                {ideas.length
+                  ? ideas.map((idea) => <IdeaCard idea={idea} key={idea.id} isSaved={isSaved(idea)} onSave={toggleSave} />)
+                  : <div className="business-list-status">Neighborhood numbers cover about 340 Los Angeles-area ZIP codes (try 91768).</div>}
+              </>
+            )}
           </div>
           <section className="saved-folder" aria-label="Saved">
             <div className="saved-folder-heading"><span>Saved</span><b>{saved.length}</b></div>

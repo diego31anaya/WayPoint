@@ -13,13 +13,15 @@ Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Defaults work without credentials: `DATA_MODE=mock`, `AI_ENABLED=false`. Mock mode uses explicitly synthetic fixed Pomona records. Try latitude `34.0551`, longitude `-117.7499`, radius `1500`. Other cities may correctly return no demo records. API docs: http://127.0.0.1:8000/docs. Avoid exposing this unauthenticated MVP to the public Internet.
+Defaults work without credentials: `DATA_MODE=local`, `AI_ENABLED=false`. Local mode analyzes the real LA-area Overture places in `../data/la_places.csv.gz` (permanently closed places excluded; first request loads the file in about 1.5 s). `DATA_MODE=mock` uses explicitly synthetic fixed Pomona records. Try latitude `34.0551`, longitude `-117.7499`, radius `1500`. Other cities may correctly return no demo records. API docs: http://127.0.0.1:8000/docs. Avoid exposing this unauthenticated MVP to the public Internet.
 
 ```powershell
 $body = @{business_type='coffee_shop'; location=@{latitude=34.0551; longitude=-117.7499}; radius_m=1500; business_goal='Attract more customers'} | ConvertTo-Json
 Invoke-RestMethod http://127.0.0.1:8000/api/analyze -Method Post -ContentType application/json -Body $body
 .\.venv\Scripts\python.exe -m pytest -q
 ```
+
+`POST /api/chat` takes `messages` (role `user`/`assistant`, up to 40) and an optional plain-text `context` of neighborhood facts, and returns `reply`, `source` (`open_weight_model` or `fallback`) and `warnings`. Without a running model it replies with the supplied facts and says so.
 
 ## API contract for C (Streamlit)
 

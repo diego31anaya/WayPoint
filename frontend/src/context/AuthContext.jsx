@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const AuthContext = createContext(null)
+import { useEffect, useState } from 'react'
+import { AuthContext } from './auth'
 const SESSION_KEY = 'waypoint-demo-session-v1'
 
 function readSession() {
@@ -42,10 +41,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within an AuthProvider')
-  return context
 }

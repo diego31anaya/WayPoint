@@ -4,6 +4,7 @@ from contextlib import closing
 from app.schemas import Business, CATEGORIES
 from app.services.analytics_service import from_businesses, get_competitor_metrics
 from app.data.demo_data import demo_businesses
+from app.data.local_places import nearby_businesses
 
 
 class DataUnavailable(Exception):
@@ -52,7 +53,7 @@ class SnowflakeService:
         self.schema_checked_at = time.monotonic()
 
     def check_availability(self):
-        if self.settings.data_mode == 'mock':
+        if self.settings.data_mode in ('mock', 'local'):
             return 'not_used'
         if not self.settings.snowflake_mapping_verified:
             return 'mapping_required'
@@ -74,8 +75,8 @@ class SnowflakeService:
 
     def analyze(self, request, map_categories=None):
         s = self.settings
-        if s.data_mode == 'mock':
-            rows = demo_businesses(request)
+        if s.data_mode in ('mock', 'local'):
+            rows = demo_businesses(request) if s.data_mode == 'mock' else nearby_businesses(request)
             markers = [b for b in rows if map_categories is None or b.category in map_categories]
             return markers[:s.map_limit], from_businesses(request, rows)
         if not s.snowflake_mapping_verified:

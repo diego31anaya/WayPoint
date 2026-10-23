@@ -71,3 +71,4 @@
   .chat-suggestion-list { display: grid; }
   .chat-suggestion-list button { text-align: left; }
 }
+.chat-typing { color: #8a968e; font-style: italic; }

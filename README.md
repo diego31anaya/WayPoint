@@ -2,6 +2,31 @@
 
 Find independent local businesses ("hidden gems") near you, plus owner-view numbers on competition and category gaps.
 
+## Run the site
+
+Two terminals, from the repo root:
+
+```bash
+# 1. Backend API (Python 3.11+). Uses the real LA places in data/la_places.csv.gz; no credentials needed.
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/uvicorn app.main:app --port 8000
+
+# 2. Frontend (Node 20+). Vite forwards /api to the backend.
+cd frontend && npm install && npm run dev      # http://localhost:5173
+```
+
+| Page | What it does | Needs the backend? |
+|---|---|---|
+| Home | Search by business type, ZIP and radius. The example brief for 91768 uses real data | No |
+| Neighborhood | Business finder: list, numbered pins, details, directions, saved list. Census ZIP outline and insight cards. LA ZIPs use Overture data and other ZIPs use live OpenStreetMap | No |
+| Neighborhood → Recommended | Strategies to test from `/api/analyze`, plus idea cards from the static data | Strategies only |
+| Chat (signed in) | Answers grounded in your last search, via `/api/chat` | Yes |
+
+**AI answers.** With the defaults, strategies are rule-based, and the chat replies with the neighborhood facts and says the model isn't running. For AI-written strategies and free-form chat, install [Ollama](https://ollama.com/download), run `ollama pull qwen3:1.7b`, then set `AI_ENABLED=true` in `backend/.env` and restart the backend. See `backend/README.md` for the API, scoring and Snowflake live mode.
+
+Tests: `cd backend && .venv/bin/python -m pytest -q`, and `cd frontend && npm run lint && npm run build`.
+
 ## Data
 
 ### Dataset

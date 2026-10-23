@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
-    data_mode: Literal['mock', 'live'] = 'mock'
+    data_mode: Literal['local', 'mock', 'live'] = 'local'
     ai_enabled: bool = False
     ollama_base_url: str = 'http://localhost:11434'
     ollama_model: str = 'qwen3:1.7b'

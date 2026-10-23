@@ -124,7 +124,7 @@ class RecommendationBatch(StrictModel):
 
 
 class Metadata(StrictModel):
-    data_source: Literal['mock', 'snowflake']
+    data_source: Literal['local', 'mock', 'snowflake']
     simulated: bool
     dataset: str = 'Overture Maps Places'
     dataset_release: str
@@ -147,3 +147,20 @@ class AnalysisResponse(StrictModel):
     metadata: Metadata
     business_information: AnalysisRequest | None = None
     neighborhood_insights: NeighborhoodInsights | None = None
+
+
+class ChatMessage(StrictModel):
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class ChatRequest(StrictModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+    # Plain-text neighborhood facts from the frontend (ZIP, business type, numbers). Untrusted data.
+    context: str = Field(default='', max_length=4000)
+
+
+class ChatResponse(StrictModel):
+    reply: str
+    source: Literal['open_weight_model', 'fallback']
+    warnings: list[str]

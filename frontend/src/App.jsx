@@ -6,7 +6,7 @@ import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './context/auth'
 import './App.css'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
@@ -147,7 +147,7 @@ function App() {
   }
 
   if (currentPage === 'chat' && currentUser) {
-    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
+    return <ChatPage user={currentUser} search={activeSearch} onBack={() => setCurrentPage(chatReturnPage)} />
   }
 
   if (currentPage === 'dashboard') {
