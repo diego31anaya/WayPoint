@@ -399,6 +399,19 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
+const QUERY_STOP_WORDS = new Set(['a', 'an', 'and', 'business', 'for', 'near', 'shop', 'store', 'the'])
+
+function queryTerms(query) {
+  return query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter((term) => term.length > 2 && !QUERY_STOP_WORDS.has(term))
+}
+
+function queryRelevance(place, query) {
+  const name = place.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const terms = queryTerms(query)
+  const phrase = query.toLowerCase().trim()
+  return (phrase && name.includes(phrase) ? 10 : 0) + terms.reduce((score, term) => score + (new RegExp(`\\b${term}\\b`).test(name) ? 4 : name.includes(term) ? 2 : 0), 0)
+}
+
 function placeKey(place) {
   return place.id ?? `${place.name}-${place.lat ?? place.coordinates?.[0] ?? ''}-${place.lon ?? place.coordinates?.[1] ?? ''}`
 }
@@ -407,7 +420,11 @@ function PlaceResultsPanel({ search, zipData, category, recommendations, selecte
   const [activeTab, setActiveTab] = useState('competitors')
   const [saveToast, setSaveToast] = useState('')
   const { user, savedLocations, saveLocation, removeSavedLocation } = useAuth()
-  const competitors = zipData?.places?.filter((place) => place.category === category).slice(0, 20) ?? []
+  const competitors = zipData?.places
+    ?.filter((place) => place.category === category)
+    .sort((a, b) => queryRelevance(b, search.businessType) - queryRelevance(a, search.businessType)
+      || (b.hidden_gem_score ?? 0) - (a.hidden_gem_score ?? 0))
+    .slice(0, 20) ?? []
   const places = activeTab === 'recommended' ? recommendations : competitors
 
   function toggleSaved(place) {
@@ -474,8 +491,8 @@ function PlaceResultsPanel({ search, zipData, category, recommendations, selecte
             >
               <div className="place-card-heading"><span>{String(index + 1).padStart(2, '0')}</span><h3>{place.name}</h3></div>
               <div className="place-tags"><span>{activeTab === 'recommended' ? place.tags[0] : (place.is_independent ? 'Independent' : 'Chain')}</span><span>{activeTab === 'recommended' ? place.tags[1] : `Gem score ${place.hidden_gem_score}`}</span></div>
-              <span className="place-category">{activeTab === 'recommended' ? place.category : (CATEGORY_LABELS[place.category]?.one ?? formatCategory(place.category ?? 'business'))}</span>
-              <p>{activeTab === 'recommended' ? place.address : `${CATEGORY_LABELS[place.category]?.one ?? 'Business'} near ${zipData.zip}`}</p>
+              <span className="place-category">{activeTab === 'recommended' ? place.category : search.businessType}</span>
+              <p>{activeTab === 'recommended' ? place.address : `${search.businessType} near ${zipData.zip}`}</p>
               <div className="place-card-footer">
                 {activeTab === 'recommended' && <button type="button" className={savedPlace ? 'is-saved' : ''} onClick={() => toggleSaved(place)}>{savedPlace ? 'Saved' : 'Save Location'}</button>}
                 <span>{activeTab === 'recommended' ? 'Suggested spot' : (place.hidden_gem_score ? `${place.hidden_gem_score} score` : 'Nearby')}</span>
