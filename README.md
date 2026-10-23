@@ -75,6 +75,15 @@ const zip = await fetch(`/data/zip/${zipCode}.json`).then(r => r.ok ? r.json() :
 ```
 Coverage: ZIPs with 50+ businesses in the box lon −118.95 to −117.65, lat 33.70 to 34.82 (LA County plus parts of Orange, Ventura and San Bernardino). ZIPs at the box's edge have partial radius counts.
 
+### Opportunity heatmap
+`python3 -m data.heatmap` (a few seconds) scores every H3 hexagon (resolution 8, ~0.74 km²) in the covered area for each category and writes `frontend/public/data/heat/` (`cells.json` outlines plus one score file per category). `data/sql/heatmap.sql` is the same computation in Snowflake with `H3_LATLNG_TO_CELL_STRING` and `H3_GRID_DISK`; it hasn't been run yet, and it ends with checks that compare against the Python output.
+
+Each hexagon is scored over itself and its 6 neighbors (~1.3 km across), and only if that neighborhood has 25+ active businesses:
+- **room** = 1 − (competitors ÷ expected) / 2, clamped to 0–1. *Expected* is what a typical LA area this busy has (the category's LA-wide share × businesses nearby).
+- **survival** = 1 − (closure rate ÷ LA closure rate) / 2, clamped. The closure rate is shrunk toward LA's rate (10 pseudo-places), so a single closure doesn't paint a hexagon red.
+- **activity** = log(1 + businesses) ÷ log(1 + 90th percentile), clamped. This keeps empty land from looking like opportunity.
+- **score** = 100 × (0.45 room + 0.35 survival + 0.20 activity). Red means crowded with more closures; green and blue mean more room. Like the other scores, it's a proxy, not measured demand.
+
 ### How the numbers are made
 - **Filtered to** places with Overture confidence > 0.7, then mapped from Overture's `TAXONOMY` to four friendly categories (`data/categories.py`):
   - `food_and_drink` → **cafe** (coffee, tea, bakeries, desserts, juice) or **restaurant** (everything else, bars included)

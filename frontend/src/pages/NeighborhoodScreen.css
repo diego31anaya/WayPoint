@@ -76,3 +76,15 @@ a.business-overlay-save { text-decoration: none; background: #e6f2eb; color: #21
 .finder-account > .save-location-button { padding: 8px 10px; border: 1px solid #cbdad1; border-radius: 7px; background: #fff; color: #218255; font: 700 9px var(--sans); }
 .finder-account > .save-location-button:hover, .finder-account > .save-location-button.is-saved { background: #e6f2eb; }
 .strategy-source small { display: block; margin-top: 3px; color: #87938c; font-weight: 600; letter-spacing: 0; }
+.map-overlay-stack { position: absolute; top: 10px; left: 10px; z-index: 500; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: min(300px, calc(100% - 70px)); }
+.map-overlay-stack .map-pin-legend { position: static; }
+.heat-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #cbdad1; border-radius: 6px; background: #fff; color: #1f2a25; font: 700 10px var(--sans); box-shadow: 0 1px 4px #20453226; cursor: pointer; }
+.heat-toggle.is-on, .heat-toggle:hover { border-color: #218255; }
+.heat-swatch { width: 26px; height: 9px; border-radius: 3px; }
+.heat-legend { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border-radius: 6px; background: #ffffffee; color: #3d4b44; font-size: 9px; box-shadow: 0 1px 4px #20453226; }
+.heat-legend strong { font-size: 10px; color: #1f2a25; }
+.heat-bar { display: block; width: 100%; min-width: 200px; height: 9px; border-radius: 3px; }
+.heat-scale { display: flex; justify-content: space-between; gap: 10px; color: #63736a; }
+.heat-legend small { color: #87938c; line-height: 1.4; }
+.spot-score { color: #fff !important; }
+.business-card-footer .show-on-map { background: #e6f2eb; color: #218255; }

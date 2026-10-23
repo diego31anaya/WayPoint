@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import { backendBusinessType, fetchStrategies } from '../services/api'
+import { fetchHeat, HEAT_GRADIENT, scoreColor } from '../services/heatmap'
 import { distanceInMiles, fetchNearbyPlaces, fetchZipBoundary, fetchZipCenter } from '../services/zipBoundary'
 import { buildBrief, CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
@@ -28,6 +29,32 @@ function toBusiness(place, center) {
   }
 }
 
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+
+function direction(from, to) {
+  const dx = (to[1] - from[1]) * Math.cos((from[0] * Math.PI) / 180)
+  const angle = (Math.atan2(dx, to[0] - from[0]) * 180) / Math.PI
+  return COMPASS[Math.round(((angle + 360) % 360) / 45) % 8]
+}
+
+// Plain-language reading of one heatmap hexagon.
+function describeCell(cell, heat) {
+  const labels = CATEGORY_LABELS[heat.category]
+  return `${cell.competitors} ${cell.competitors === 1 ? labels.one : labels.many} within about 1 km, where a typical LA area this busy has ${Math.round(cell.expected)}. `
+    + `Estimated closure rate ${percent(cell.closure_rate)} (LA average ${percent(heat.la_closure_rate)}). ${cell.businesses} businesses nearby.`
+}
+
+function heatPopup(cell, heat) {
+  const box = document.createElement('div')
+  const title = document.createElement('strong')
+  const text = document.createElement('span')
+  box.className = 'place-popup'
+  title.textContent = `Opportunity ${cell.score}/100 for a ${CATEGORY_LABELS[heat.category].one}`
+  text.textContent = describeCell(cell, heat)
+  box.append(title, text)
+  return box
+}
+
 function numberedIcon(number, chain) {
   return L.divIcon({
     className: 'business-marker-wrap',
@@ -37,7 +64,7 @@ function numberedIcon(number, chain) {
   })
 }
 
-function FinderMap({ zipCode, geoJson, center, radiusMiles, businesses, others, placesSource, onSelectBusiness }) {
+function FinderMap({ zipCode, geoJson, center, radiusMiles, businesses, others, placesSource, heat, focusCell, onSelectBusiness }) {
   const mapElement = useRef(null)
 
   useEffect(() => {
@@ -74,8 +101,21 @@ function FinderMap({ zipCode, geoJson, center, radiusMiles, businesses, others, 
       map.attributionControl.addAttribution('Places © <a href="https://overturemaps.org">Overture Maps Foundation</a>')
     }
 
-    // Unlisted businesses as small dots for context, listed ones as numbered pins on top.
-    others.forEach((business) => {
+    if (heat) {
+      const renderer = L.canvas({ padding: 0.5 })
+      heat.cells.forEach((cell) => {
+        L.polygon(cell.outline, { renderer, weight: 0.5, color: '#ffffff', opacity: 0.7, fillColor: scoreColor(cell.score), fillOpacity: 0.5 })
+          .bindPopup(() => heatPopup(cell, heat))
+          .addTo(map)
+      })
+    }
+    if (focusCell) {
+      L.polygon(focusCell.outline, { weight: 3, color: '#14342a', fill: false, interactive: false }).addTo(map)
+      map.setView(focusCell.center, 14)
+    }
+
+    // Unlisted businesses as small dots for context (hidden under the heatmap), listed ones as numbered pins on top.
+    if (!heat) others.forEach((business) => {
       L.circleMarker(business.coordinates, { radius: 3.5, weight: 0, fillColor: '#7d8377', fillOpacity: 0.7 })
         .on('click', () => onSelectBusiness(business))
         .addTo(map)
@@ -87,12 +127,12 @@ function FinderMap({ zipCode, geoJson, center, radiusMiles, businesses, others, 
     })
     requestAnimationFrame(() => map.invalidateSize())
     return () => map.remove()
-  }, [businesses, center, geoJson, others, placesSource, radiusMiles, onSelectBusiness])
+  }, [businesses, center, geoJson, others, placesSource, radiusMiles, heat, focusCell, onSelectBusiness])
 
   return <div className="finder-map" ref={mapElement} role="region" aria-label={`Businesses near ZIP code ${zipCode}`} />
 }
 
-function NeighborhoodMap({ zipCode, center, radiusMiles, businesses, others, placesSource, onSelectBusiness }) {
+function NeighborhoodMap({ zipCode, center, radiusMiles, businesses, others, placesSource, heat, heatOn, onToggleHeat, focusCell, onSelectBusiness }) {
   const [boundary, setBoundary] = useState({ zip: null, status: 'loading', geoJson: null })
   const [retryCount, setRetryCount] = useState(0)
   // A result for a different ZIP means the new one is still loading.
@@ -124,6 +164,8 @@ function NeighborhoodMap({ zipCode, center, radiusMiles, businesses, others, pla
           businesses={businesses}
           others={others}
           placesSource={placesSource}
+          heat={heatOn ? heat : null}
+          focusCell={heatOn ? focusCell : null}
           onSelectBusiness={onSelectBusiness}
         />
       )}
@@ -139,11 +181,27 @@ function NeighborhoodMap({ zipCode, center, radiusMiles, businesses, others, pla
       )}
       {showMap && result.status === 'error' && <div className="map-note" role="status">Couldn’t load the ZIP outline. {retry}</div>}
       {showMap && result.status === 'not-found' && <div className="map-note" role="status">No Census ZIP outline for {zipCode}.</div>}
-      {showMap && placesSource === 'overture' && (
-        <div className="map-pin-legend">
-          <span><i className="pin-dot pin-independent" />Independent</span>
-          <span><i className="pin-dot pin-chain" />Chain</span>
-          <span><i className="pin-dot pin-other" />Not in list</span>
+      {showMap && (
+        <div className="map-overlay-stack">
+          {heat && (
+            <button className={`heat-toggle${heatOn ? ' is-on' : ''}`} type="button" aria-pressed={heatOn} onClick={onToggleHeat}>
+              <span className="heat-swatch" style={{ background: HEAT_GRADIENT }} />{heatOn ? 'Hide' : 'Show'} opportunity heatmap
+            </button>
+          )}
+          {heat && heatOn ? (
+            <div className="heat-legend">
+              <strong>Where a new {CATEGORY_LABELS[heat.category].one} has room</strong>
+              <span className="heat-bar" style={{ background: HEAT_GRADIENT }} />
+              <span className="heat-scale"><span>Crowded, more closures</span><span>More room</span></span>
+              <small>Click a hexagon for its numbers. Uncolored areas have too few businesses to score.</small>
+            </div>
+          ) : placesSource === 'overture' && (
+            <div className="map-pin-legend">
+              <span><i className="pin-dot pin-independent" />Independent</span>
+              <span><i className="pin-dot pin-chain" />Chain</span>
+              <span><i className="pin-dot pin-other" />Not in list</span>
+            </div>
+          )}
         </div>
       )}
       <div className="map-radius-label">
@@ -227,6 +285,21 @@ function Strategies({ result, businessType, isSaved, onSave }) {
       <div className="business-list-status strategy-source">STRATEGIES TO TEST · {source}<small>{data}</small></div>
       {recommendations.map((strategy) => <StrategyCard strategy={strategy} key={strategy.id} isSaved={isSaved(strategy)} onSave={onSave} />)}
     </>
+  )
+}
+
+function SpotCard({ spot, index, center, heat, isSaved, onSave, onShow }) {
+  const miles = distanceInMiles(center, spot.center)
+  return (
+    <article className="business-card idea-card">
+      <div className="business-card-top"><span className="business-number">{String(index + 1).padStart(2, '0')}</span><h2>{miles.toFixed(1)} mi {direction(center, spot.center)} of the center</h2></div>
+      <div className="business-tags"><span className="spot-score" style={{ background: scoreColor(spot.score) }}>Opportunity {spot.score}/100</span></div>
+      <p>{describeCell(spot, heat)}</p>
+      <div className="business-card-footer">
+        <SaveButton item={spot} isSaved={isSaved} onSave={onSave} />
+        <button type="button" className="show-on-map" onClick={() => onShow(spot)}>Show on map</button>
+      </div>
+    </article>
   )
 }
 
@@ -469,6 +542,33 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
   const strategyResult = strategies.key === strategyKey ? strategies : { status: 'loading' }
   const strategyCount = strategyResult.status === 'ready' ? strategyResult.data.recommendations.length : 0
 
+  const heatCategory = data ? (activeCategory in CATEGORY_LABELS ? activeCategory : category) : null
+  const [heatResult, setHeatResult] = useState({ category: null })
+  const [heatOn, setHeatOn] = useState(false)
+  const [focusCell, setFocusCell] = useState(null)
+  useEffect(() => {
+    if (!heatCategory) return
+    let current = true
+    fetchHeat(heatCategory)
+      .then((heat) => { if (current) setHeatResult({ category: heatCategory, heat }) })
+      .catch(() => { if (current) setHeatResult({ category: heatCategory, heat: null }) })
+    return () => { current = false }
+  }, [heatCategory])
+  const heat = heatResult.category === heatCategory ? heatResult.heat : null
+  // Best-scoring hexagons within the search radius.
+  const spots = useMemo(() => {
+    if (!heat || !center) return []
+    return heat.cells
+      .filter((cell) => distanceInMiles(center, cell.center) <= radius)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((cell) => ({ ...cell, id: `spot-${heat.category}-${cell.cell}`, name: `${CATEGORY_LABELS[heat.category].one} spot · score ${cell.score}` }))
+  }, [heat, center, radius])
+  function showSpot(spot) {
+    setFocusCell(spot)
+    setHeatOn(true)
+  }
+
   const isSaved = (item) => saved.some((entry) => entry.id === item.id)
   function toggleSave(item) {
     setSaved((current) => (current.some((entry) => entry.id === item.id)
@@ -517,7 +617,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
         <aside className="business-results">
           <div className="results-tabs">
             <button className={activeTab === 'competitors' ? 'active' : ''} type="button" onClick={() => setActiveTab('competitors')}>Competitors <b>({matches})</b></button>
-            <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({ideas.length + strategyCount})</b></button>
+            <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({spots.length + ideas.length + strategyCount})</b></button>
           </div>
           <div className="results-caption">
             {activeTab === 'recommended'
@@ -533,6 +633,12 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
             )}
             {activeTab === 'recommended' && (
               <>
+                {spots.length > 0 && (
+                  <>
+                    <div className="business-list-status strategy-source">BEST SPOTS NEARBY FOR A NEW {CATEGORY_LABELS[heat.category].one.toUpperCase()}<small>Highest heatmap scores within {radius} mi</small></div>
+                    {spots.map((spot, i) => <SpotCard spot={spot} index={i} key={spot.id} center={center} heat={heat} isSaved={isSaved(spot)} onSave={toggleSave} onShow={showSpot} />)}
+                  </>
+                )}
                 <Strategies result={strategyResult} businessType={strategyType} isSaved={isSaved} onSave={toggleSave} />
                 {ideas.length > 0 && <div className="business-list-status strategy-source">WHAT THE NUMBERS SAY</div>}
                 {ideas.length
@@ -556,6 +662,10 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
             businesses={listed}
             others={others}
             placesSource={data ? 'overture' : 'osm'}
+            heat={heat}
+            heatOn={heatOn}
+            onToggleHeat={() => { setHeatOn((on) => !on); setFocusCell(null) }}
+            focusCell={focusCell}
             onSelectBusiness={setSelected}
           />
         </section>
