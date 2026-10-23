@@ -361,7 +361,7 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat }) {
+function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation }) {
   const category = matchCategory(search.businessType)
   const [radius, setRadius] = useState(search.radiusMiles)
   const [query, setQuery] = useState('')
@@ -496,7 +496,16 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
           <option value="all">All categories</option>
           {categoryOptions.map((group) => <option key={group} value={group}>{categoryLabel(group)}</option>)}
         </select>
-        <div className="finder-account"><button type="button" onClick={onBack}>Edit search</button>{user && <ChatNavButton onClick={onOpenChat} />}<AccountControl user={user} onCreateAccount={onCreateAccount} onOpenDashboard={onOpenDashboard} /></div>
+        <div className="finder-account">
+          <button
+            className={`save-location-button${locationSaved ? ' is-saved' : ''}`}
+            type="button"
+            onClick={user ? (locationSaved ? onRemoveLocation : onSaveLocation) : onCreateAccount}
+            aria-pressed={user ? locationSaved : undefined}
+          >
+            {user ? (locationSaved ? '✓ Saved area' : '＋ Save this area') : 'Sign up to save this area'}
+          </button>
+          <button type="button" onClick={onBack}>Edit search</button>{user && <ChatNavButton onClick={onOpenChat} />}<AccountControl user={user} onCreateAccount={onCreateAccount} onOpenDashboard={onOpenDashboard} /></div>
       </header>
       <section className="finder-layout">
         <aside className="business-results">

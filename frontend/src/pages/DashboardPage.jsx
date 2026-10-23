@@ -2,7 +2,7 @@ import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import './DashboardPage.css'
 
-function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut, onOpenChat }) {
+function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
   return (
     <main className="dashboard-page">
       <header className="site-header page-shell">
@@ -43,9 +43,9 @@ function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut, on
           </article>
           <article className="dashboard-stat-card">
             <span className="stat-icon">✳</span>
-            <span className="stat-label">SAVED OPPORTUNITIES</span>
-            <strong>0</strong>
-            <span className="stat-description">Ideas you choose to keep</span>
+            <span className="stat-label">SAVED LOCATIONS</span>
+            <strong>{savedLocations.length}</strong>
+            <span className="stat-description">Neighborhoods saved to your account</span>
           </article>
           <article className="dashboard-recent-card">
             <span className="stat-label">RECENT SEARCH</span>
@@ -63,6 +63,33 @@ function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut, on
             )}
           </article>
         </div>
+
+        <section className="saved-locations" aria-labelledby="saved-locations-heading">
+          <div className="saved-locations-heading">
+            <div>
+              <span className="stat-label">YOUR WAYPOINTS</span>
+              <h2 id="saved-locations-heading">Saved locations</h2>
+            </div>
+            <span>{savedLocations.length} saved</span>
+          </div>
+          {savedLocations.length ? (
+            <div className="saved-location-list">
+              {savedLocations.map((location) => (
+                <article className="saved-location-card" key={location.id}>
+                  <span className="saved-location-mark" aria-hidden="true">⌖</span>
+                  <div className="saved-location-details">
+                    <strong>{location.businessType}</strong>
+                    <span>ZIP {location.zipCode} · within {location.radiusMiles} miles</span>
+                  </div>
+                  <button className="saved-location-open" type="button" onClick={() => onOpenSavedLocation(location)}>Open map <span>→</span></button>
+                  <button className="saved-location-remove" type="button" onClick={() => onRemoveSavedLocation(location.id)} aria-label={`Remove ${location.businessType} in ${location.zipCode}`}>×</button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="saved-locations-empty">Explore an area and save it to keep it here with your account.</p>
+          )}
+        </section>
 
         <p className="dashboard-demo-note">Demo mode: your signed-in email is remembered in this browser. Neighborhood search data is temporary and resets when you refresh.</p>
       </section>

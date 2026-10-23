@@ -6,7 +6,8 @@ import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
-import { useAuth } from './context/auth'
+import { useAuth } from './context/useAuth'
+import { savedLocationId } from './services/savedLocations'
 import './App.css'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
@@ -99,7 +100,7 @@ function App() {
   }, [])
   const recommendations = brief?.ideas ?? fallbackRecommendations
   const [chatReturnPage, setChatReturnPage] = useState('home')
-  const { user: currentUser, signIn, signOut } = useAuth()
+  const { user: currentUser, signIn, signOut, savedLocations, saveLocation, removeSavedLocation } = useAuth()
 
   function handleOpenChat() {
     setChatReturnPage(currentPage)
@@ -109,6 +110,15 @@ function App() {
   function handleCreateAccount() {
     setReturnPage(currentPage)
     setCurrentPage('account')
+  }
+
+  function handleOpenSavedLocation(location) {
+    setActiveSearch({
+      businessType: location.businessType,
+      zipCode: location.zipCode,
+      radiusMiles: location.radiusMiles,
+    })
+    setCurrentPage('neighborhood')
   }
 
   function handleSubmit(event) {
@@ -156,8 +166,11 @@ function App() {
         <DashboardPage
           user={currentUser}
           activeSearch={activeSearch}
+          savedLocations={savedLocations}
           onExplore={() => setCurrentPage(activeSearch ? 'neighborhood' : 'home')}
           onViewMap={() => setCurrentPage('neighborhood')}
+          onOpenSavedLocation={handleOpenSavedLocation}
+          onRemoveSavedLocation={removeSavedLocation}
           onOpenChat={handleOpenChat}
           onSignOut={() => {
             signOut()
@@ -178,6 +191,9 @@ function App() {
           onCreateAccount={handleCreateAccount}
           onOpenDashboard={() => setCurrentPage('dashboard')}
           onOpenChat={handleOpenChat}
+          locationSaved={savedLocations.some((location) => location.id === savedLocationId(activeSearch))}
+          onSaveLocation={() => saveLocation(activeSearch)}
+          onRemoveLocation={() => removeSavedLocation(savedLocationId(activeSearch))}
         />
       </>
     )

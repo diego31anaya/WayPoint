@@ -73,3 +73,5 @@ a.business-overlay-save { text-decoration: none; background: #e6f2eb; color: #21
 .strategy-source { color: #218255; font-weight: 750; letter-spacing: .5px; }
 .strategy-card ol { margin: 0 0 10px; padding-left: 16px; color: #5a6b62; font-size: 9px; line-height: 1.5; }
 .strategy-card .business-tags { margin: 0 0 10px; }
+.finder-account > .save-location-button { padding: 8px 10px; border: 1px solid #cbdad1; border-radius: 7px; background: #fff; color: #218255; font: 700 9px var(--sans); }
+.finder-account > .save-location-button:hover, .finder-account > .save-location-button.is-saved { background: #e6f2eb; }
