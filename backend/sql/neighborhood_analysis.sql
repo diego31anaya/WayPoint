@@ -1,0 +1,28 @@
+-- Canonical view contract (created in YOUR writable database, not shared listing):
+-- BUSINESS_ID VARCHAR nullable, NAME VARCHAR, CATEGORY VARCHAR normalized,
+-- LATITUDE FLOAT, LONGITUDE FLOAT, GEOG GEOGRAPHY (WGS84).
+-- Exactly one row per place, and one canonical category per row.
+-- Mapping is deliberately not executable until actual fields are verified.
+-- CREATE VIEW <app_db>.<app_schema>.BLOCKBOOST_PLACES AS
+-- SELECT <verified_id_expression>::VARCHAR AS BUSINESS_ID,
+--        <verified_name_expression>::VARCHAR AS NAME,
+--        <verified_category_expression>::VARCHAR AS CATEGORY,
+--        <verified_latitude_expression>::FLOAT AS LATITUDE,
+--        <verified_longitude_expression>::FLOAT AS LONGITUDE,
+--        <verified_geography_expression> AS GEOG
+-- FROM <actual_shared_database>.<actual_schema>.<actual_table>
+-- WHERE <verified_quality_filter>;
+-- If ID is unavailable, use NULL::VARCHAR; never manufacture an observed ID.
+-- If geometry is projected GEOMETRY, correctly transform its CRS before geography conversion.
+-- Do not cast projected coordinates straight to GEOGRAPHY.
+-- Check names/coordinates/category completeness and category aliases.
+-- Keep missing categories as 'unknown' rather than guessing.
+
+-- Python connector uses %s parameters in this order: longitude, latitude, radius.
+-- Replace canonical identifier ONLY with the configured verified view.
+-- SELECT CATEGORY, COUNT(*) AS N,
+--        MIN(ST_DISTANCE(GEOG, ST_MAKEPOINT(%s, %s))) AS NEAREST_M
+-- FROM <app_db>.<app_schema>.BLOCKBOOST_PLACES
+-- WHERE ST_DWITHIN(GEOG, ST_MAKEPOINT(%s, %s), %s)
+-- GROUP BY CATEGORY;
+-- Actual application combines full aggregates and bounded markers in one statement.

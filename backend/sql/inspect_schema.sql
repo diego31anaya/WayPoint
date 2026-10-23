@@ -1,0 +1,11 @@
+-- Run interactively with CoCo. Replace bracketed identifiers after SHOW output.
+SHOW DATABASES;
+-- SHOW SCHEMAS IN DATABASE <marketplace_database>;
+-- SHOW TABLES IN SCHEMA <marketplace_database>.<schema>;
+-- SHOW VIEWS IN SCHEMA <marketplace_database>.<schema>;
+-- DESCRIBE TABLE <marketplace_database>.<schema>.<places_table>;
+-- SELECT * FROM <marketplace_database>.<schema>.<places_table> LIMIT 5;
+-- Inspect actual VARIANT keys, geometry types, coordinate reference system, nulls,
+-- category values, duplicate IDs, and listing release before writing the view.
+-- Current taxonomy/basic_category and legacy categories are not interchangeable.
+-- Record release from listing/share metadata; do not infer it from code date.
