@@ -61,3 +61,16 @@ def test_chat_uses_model_when_enabled():
 
 def test_chat_rejects_empty_messages():
     assert TestClient(app).post('/api/chat', json={'messages': []}).status_code == 422
+
+
+def test_live_failure_falls_back_to_local_only_when_enabled(request_data):
+    from app.config import get_settings
+    for fallback, expected in [(False, 503), (True, 200)]:
+        settings = Settings(_env_file=None, data_mode='live', local_fallback=fallback)  # mapping not verified -> DataUnavailable
+        app.dependency_overrides[get_settings] = lambda: settings
+        app.dependency_overrides[get_data_service] = lambda: SnowflakeService(settings)
+        response = TestClient(app).post('/api/analyze', json=request_data)
+        assert response.status_code == expected
+    body = response.json()
+    assert body['metadata']['data_source'] == 'local' and not body['metadata']['simulated']
+    assert any('Snowflake unavailable' in w for w in body['metadata']['warnings'])

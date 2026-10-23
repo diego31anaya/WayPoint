@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     data_mode: Literal['local', 'mock', 'live'] = 'local'
+    # Live mode only: on a Snowflake failure, analyze the local export of the same table (labeled) instead of a 503.
+    local_fallback: bool = False
     ai_enabled: bool = False
     ollama_base_url: str = 'http://localhost:11434'
     ollama_model: str = 'qwen3:1.7b'

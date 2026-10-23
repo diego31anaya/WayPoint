@@ -75,3 +75,4 @@ a.business-overlay-save { text-decoration: none; background: #e6f2eb; color: #21
 .strategy-card .business-tags { margin: 0 0 10px; }
 .finder-account > .save-location-button { padding: 8px 10px; border: 1px solid #cbdad1; border-radius: 7px; background: #fff; color: #218255; font: 700 9px var(--sans); }
 .finder-account > .save-location-button:hover, .finder-account > .save-location-button.is-saved { background: #e6f2eb; }
+.strategy-source small { display: block; margin-top: 3px; color: #87938c; font-weight: 600; letter-spacing: 0; }

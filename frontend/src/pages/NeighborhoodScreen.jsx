@@ -217,9 +217,14 @@ function Strategies({ result, businessType, isSaved, onSave }) {
   const source = metadata.recommendation_source === 'open_weight_model'
     ? `Written by ${metadata.ai_model} from these numbers`
     : 'Rule-based (the AI model isn’t running)'
+  const data = {
+    snowflake: 'Counts from a live Snowflake geospatial query',
+    local: 'Counts from the Snowflake export of LA places',
+    mock: 'Synthetic demo data',
+  }[metadata.data_source]
   return (
     <>
-      <div className="business-list-status strategy-source">STRATEGIES TO TEST · {source}</div>
+      <div className="business-list-status strategy-source">STRATEGIES TO TEST · {source}<small>{data}</small></div>
       {recommendations.map((strategy) => <StrategyCard strategy={strategy} key={strategy.id} isSaved={isSaved(strategy)} onSave={onSave} />)}
     </>
   )

@@ -11,6 +11,13 @@ class DataUnavailable(Exception):
     pass
 
 
+def offline_analysis(request, map_limit, mock=False, map_categories=None):
+    """Analysis from the synthetic fixtures (mock) or the local export of LA places."""
+    rows = demo_businesses(request) if mock else nearby_businesses(request)
+    markers = [b for b in rows if map_categories is None or b.category in map_categories]
+    return markers[:map_limit], from_businesses(request, rows)
+
+
 def identifier(value):
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value):
         raise DataUnavailable('Snowflake identifiers must be configured as simple SQL identifiers.')
@@ -76,9 +83,7 @@ class SnowflakeService:
     def analyze(self, request, map_categories=None):
         s = self.settings
         if s.data_mode in ('mock', 'local'):
-            rows = demo_businesses(request) if s.data_mode == 'mock' else nearby_businesses(request)
-            markers = [b for b in rows if map_categories is None or b.category in map_categories]
-            return markers[:s.map_limit], from_businesses(request, rows)
+            return offline_analysis(request, s.map_limit, s.data_mode == 'mock', map_categories)
         if not s.snowflake_mapping_verified:
             raise DataUnavailable('Live data mapping has not been verified. Ask the data lead to configure the canonical view.')
         try:
