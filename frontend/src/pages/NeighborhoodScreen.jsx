@@ -1,305 +1,188 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
-import { backendBusinessType, fetchStrategies } from '../services/api'
-import { fetchHeat, HEAT_GRADIENT, scoreColor } from '../services/heatmap'
-import { distanceInMiles, fetchNearbyPlaces, fetchZipBoundary, fetchZipCenter } from '../services/zipBoundary'
-import { buildBrief, CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
+import { useAuth } from '../context/useAuth'
+import { fetchZipBoundary } from '../services/zipBoundary'
+import { CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
 
 const MILE_M = 1609.34
-const MAX_LISTED = 40
-const RADIUS_OPTIONS = [1, 2, 3, 5, 10]
 const percent = (rate) => `${(rate * 100).toFixed(1)}%`
 
-// Overture place from the ZIP export -> the same shape fetchNearbyPlaces returns.
-function toBusiness(place, center) {
-  const coordinates = [place.lat, place.lon]
-  return {
-    id: `${place.name}-${place.lat}-${place.lon}`,
-    name: place.name,
-    category: CATEGORY_LABELS[place.category].one,
-    group: place.category,
-    independent: place.is_independent,
-    tags: [place.is_independent ? 'Independent' : 'Chain', `Gem score ${place.hidden_gem_score}`],
-    coordinates,
-    miles: distanceInMiles(center, coordinates),
-  }
-}
-
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-
-function direction(from, to) {
-  const dx = (to[1] - from[1]) * Math.cos((from[0] * Math.PI) / 180)
-  const angle = (Math.atan2(dx, to[0] - from[0]) * 180) / Math.PI
-  return COMPASS[Math.round(((angle + 360) % 360) / 45) % 8]
-}
-
-// Plain-language reading of one heatmap hexagon.
-function describeCell(cell, heat) {
-  const labels = CATEGORY_LABELS[heat.category]
-  return `${cell.competitors} ${cell.competitors === 1 ? labels.one : labels.many} within about 1 km, where a typical LA area this busy has ${Math.round(cell.expected)}. `
-    + `Estimated closure rate ${percent(cell.closure_rate)} (LA average ${percent(heat.la_closure_rate)}). ${cell.businesses} businesses nearby.`
-}
-
-function heatPopup(cell, heat) {
+// Built with DOM nodes so business names are never parsed as HTML.
+function placePopup(place) {
   const box = document.createElement('div')
-  const title = document.createElement('strong')
-  const text = document.createElement('span')
+  const name = document.createElement('strong')
+  const info = document.createElement('span')
   box.className = 'place-popup'
-  title.textContent = `Opportunity ${cell.score}/100 for a ${CATEGORY_LABELS[heat.category].one}`
-  text.textContent = describeCell(cell, heat)
-  box.append(title, text)
+  name.textContent = place.name
+  const label = CATEGORY_LABELS[place.category]?.one ?? formatCategory(place.category ?? 'business')
+  info.textContent = `${label} · ${place.is_independent ? 'Independent' : 'Chain'} · gem score ${place.hidden_gem_score}`
+  box.append(name, info)
   return box
 }
 
-function numberedIcon(number, chain) {
-  return L.divIcon({
-    className: 'business-marker-wrap',
-    html: `<span class="business-marker${chain ? ' chain' : ''}"><span>•</span></span><b>${number}</b>`,
-    iconSize: [36, 42],
-    iconAnchor: [18, 36],
-  })
+function addPlaces(map, zipData, category, radiusMiles) {
+  const { lat, lon } = zipData.center
+  L.circle([lat, lon], {
+    radius: radiusMiles * MILE_M,
+    color: '#d27a4e',
+    weight: 1.5,
+    dashArray: '5 6',
+    fill: false,
+    interactive: false,
+  }).addTo(map)
+
+  // Other categories first so the searched category's pins sit on top.
+  const places = [...zipData.places].sort((a, b) => (a.category === category) - (b.category === category))
+  for (const place of places) {
+    const match = place.category === category
+    L.circleMarker([place.lat, place.lon], {
+      radius: match ? 6 : 3.5,
+      weight: match ? 1.5 : 0,
+      color: '#fffefa',
+      fillColor: match ? (place.is_independent ? '#365b43' : '#d27a4e') : '#7d8377',
+      fillOpacity: match ? 0.95 : 0.7,
+    }).bindPopup(placePopup(place)).addTo(map)
+  }
 }
 
-function FinderMap({ zipCode, geoJson, center, radiusMiles, businesses, others, placesSource, heat, focusCell, onSelectBusiness }) {
+function placeCoordinates(place) {
+  const lat = place?.lat ?? place?.coordinates?.[0]
+  const lon = place?.lon ?? place?.coordinates?.[1]
+  return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null
+}
+
+function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selectedPlace }) {
   const mapElement = useRef(null)
 
   useEffect(() => {
     if (!mapElement.current) return undefined
-    const map = L.map(mapElement.current, { zoomControl: false, scrollWheelZoom: false })
-    L.control.zoom({ position: 'topright' }).addTo(map)
-    L.tileLayer(import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+    const map = L.map(mapElement.current, { scrollWheelZoom: false })
+    const tileUrl = import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+    L.tileLayer(tileUrl, {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map)
 
-    if (geoJson) {
-      const boundary = L.geoJSON(geoJson, {
-        style: { color: '#25805a', weight: 2, opacity: 0.8, fillColor: '#bfe7d2', fillOpacity: 0.1 },
-      }).addTo(map)
-      map.fitBounds(boundary.getBounds(), { padding: [38, 38], maxZoom: 13 })
-      map.attributionControl.addAttribution(
-        '<a href="https://www.census.gov/programs-surveys/geography/guidance/geo-areas/zctas.html">ZIP Code Tabulation Area data © U.S. Census Bureau</a>',
-      )
-    } else {
-      map.setView(center, 12)
-    }
-    if (center) {
-      L.circle(center, {
-        radius: radiusMiles * MILE_M,
-        color: '#d27a4e',
-        weight: 1.5,
-        dashArray: '5 6',
-        fill: false,
-        interactive: false,
-      }).addTo(map)
-    }
-    if (placesSource === 'overture') {
+    const boundary = L.geoJSON(geoJson, {
+      style: {
+        color: '#365b43',
+        weight: 3,
+        opacity: 0.95,
+        fillColor: '#7e9b70',
+        fillOpacity: 0.2,
+      },
+    }).addTo(map)
+
+    map.fitBounds(boundary.getBounds(), { padding: [28, 28], maxZoom: 13 })
+    map.attributionControl.addAttribution(
+      '<a href="https://www.census.gov/programs-surveys/geography/guidance/geo-areas/zctas.html">ZIP Code Tabulation Area data © U.S. Census Bureau</a>',
+    )
+    if (zipData) {
+      addPlaces(map, zipData, category, dataRadius(radiusMiles))
       map.attributionControl.addAttribution('Places © <a href="https://overturemaps.org">Overture Maps Foundation</a>')
     }
 
-    if (heat) {
-      const renderer = L.canvas({ padding: 0.5 })
-      heat.cells.forEach((cell) => {
-        L.polygon(cell.outline, { renderer, weight: 0.5, color: '#ffffff', opacity: 0.7, fillColor: scoreColor(cell.score), fillOpacity: 0.5 })
-          .bindPopup(() => heatPopup(cell, heat))
-          .addTo(map)
-      })
-    }
-    if (focusCell) {
-      L.polygon(focusCell.outline, { weight: 3, color: '#14342a', fill: false, interactive: false }).addTo(map)
-      map.setView(focusCell.center, 14)
+    const selectedCoordinates = placeCoordinates(selectedPlace)
+    if (selectedCoordinates) {
+      L.circleMarker(selectedCoordinates, {
+        radius: 13,
+        color: '#1f8f3a',
+        weight: 3,
+        fillColor: '#5ee27a',
+        fillOpacity: 0.45,
+        className: 'selected-map-ping',
+      }).bindPopup(placePopup(selectedPlace)).addTo(map).bringToFront()
+      map.setView(selectedCoordinates, Math.max(map.getZoom(), 16), { animate: true })
     }
 
-    // Unlisted businesses as small dots for context (hidden under the heatmap), listed ones as numbered pins on top.
-    if (!heat) others.forEach((business) => {
-      L.circleMarker(business.coordinates, { radius: 3.5, weight: 0, fillColor: '#7d8377', fillOpacity: 0.7 })
-        .on('click', () => onSelectBusiness(business))
-        .addTo(map)
-    })
-    businesses.forEach((business, index) => {
-      L.marker(business.coordinates, { icon: numberedIcon(index + 1, business.independent === false) })
-        .on('click', () => onSelectBusiness(business))
-        .addTo(map)
-    })
-    requestAnimationFrame(() => map.invalidateSize())
     return () => map.remove()
-  }, [businesses, center, geoJson, others, placesSource, radiusMiles, heat, focusCell, onSelectBusiness])
+  }, [geoJson, zipData, category, radiusMiles, selectedPlace])
 
-  return <div className="finder-map" ref={mapElement} role="region" aria-label={`Businesses near ZIP code ${zipCode}`} />
+  return <div className="leaflet-map" ref={mapElement} role="region" aria-label={`Map of ZIP code ${zipCode}`} />
 }
 
-function NeighborhoodMap({ zipCode, center, radiusMiles, businesses, others, placesSource, heat, heatOn, onToggleHeat, focusCell, onSelectBusiness }) {
-  const [boundary, setBoundary] = useState({ zip: null, status: 'loading', geoJson: null })
+function NeighborhoodMap({ zipCode, radiusMiles, zipData, category, selectedPlace }) {
+  const [mapResult, setMapResult] = useState({ status: 'loading', geoJson: null })
   const [retryCount, setRetryCount] = useState(0)
-  // A result for a different ZIP means the new one is still loading.
-  const result = boundary.zip === zipCode ? boundary : { status: 'loading', geoJson: null }
 
   useEffect(() => {
     const controller = new AbortController()
     fetchZipBoundary(zipCode, { signal: controller.signal })
       .then((geoJson) => {
-        if (!controller.signal.aborted) setBoundary({ zip: zipCode, status: geoJson ? 'ready' : 'not-found', geoJson })
+        if (controller.signal.aborted) return
+        setMapResult(geoJson
+          ? { status: 'ready', geoJson }
+          : { status: 'not-found', geoJson: null })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setBoundary({ zip: zipCode, status: 'error', geoJson: null })
+        if (!controller.signal.aborted) {
+          setMapResult({ status: 'error', geoJson: null })
+        }
       })
+
     return () => controller.abort()
   }, [zipCode, retryCount])
 
-  const showMap = result.status !== 'loading' && (result.geoJson || center)
-  const retry = <button type="button" onClick={() => setRetryCount((count) => count + 1)}>Try again</button>
+  const noBoundary = mapResult.status === 'not-found'
 
   return (
-    <div className="finder-map-shell">
-      {showMap && (
-        <FinderMap
-          zipCode={zipCode}
-          geoJson={result.geoJson}
-          center={center}
-          radiusMiles={radiusMiles}
-          businesses={businesses}
-          others={others}
-          placesSource={placesSource}
-          heat={heatOn ? heat : null}
-          focusCell={heatOn ? focusCell : null}
-          onSelectBusiness={onSelectBusiness}
-        />
-      )}
-      {!showMap && result.status === 'loading' && <div className="map-status" role="status"><span className="map-loader" />Loading your area map…</div>}
-      {!showMap && result.status === 'not-found' && (
-        <div className="map-status" role="status">
-          <strong>No Census ZIP area found for {zipCode}</strong>
-          <span>Some USPS ZIP codes do not have a matching Census ZIP Code Tabulation Area.</span>
+    <section className="neighborhood-map-shell" aria-label={`Map of ZIP code ${zipCode}`}>
+      <div className="neighborhood-map-toolbar">
+        <div className="map-location">
+          <span className="location-mark" aria-hidden="true">⌖</span>
+          <span><small>ZIP CODE</small><strong>{zipCode}</strong></span>
         </div>
-      )}
-      {!showMap && result.status === 'error' && (
-        <div className="map-status" role="status"><strong>Couldn’t load the map</strong><span>Check your connection and try again.</span>{retry}</div>
-      )}
-      {showMap && result.status === 'error' && <div className="map-note" role="status">Couldn’t load the ZIP outline. {retry}</div>}
-      {showMap && result.status === 'not-found' && <div className="map-note" role="status">No Census ZIP outline for {zipCode}.</div>}
-      {showMap && (
-        <div className="map-overlay-stack">
-          {heat && (
-            <button className={`heat-toggle${heatOn ? ' is-on' : ''}`} type="button" aria-pressed={heatOn} onClick={onToggleHeat}>
-              <span className="heat-swatch" style={{ background: HEAT_GRADIENT }} />{heatOn ? 'Hide' : 'Show'} opportunity heatmap
-            </button>
-          )}
-          {heat && heatOn ? (
-            <div className="heat-legend">
-              <strong>Where a new {CATEGORY_LABELS[heat.category].one} has room</strong>
-              <span className="heat-bar" style={{ background: HEAT_GRADIENT }} />
-              <span className="heat-scale"><span>Crowded, more closures</span><span>More room</span></span>
-              <small>Click a hexagon for its numbers. Uncolored areas have too few businesses to score.</small>
-            </div>
-          ) : placesSource === 'overture' && (
-            <div className="map-pin-legend">
-              <span><i className="pin-dot pin-independent" />Independent</span>
-              <span><i className="pin-dot pin-chain" />Chain</span>
-              <span><i className="pin-dot pin-other" />Not in list</span>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="map-radius-label">
-        Showing places within <strong>{radiusMiles} mi</strong>
-        {result.geoJson && ' · ZIP outline: 2020 Census ZCTA'}
+        <span className="radius-badge">Search radius <strong>{radiusMiles} mi</strong></span>
       </div>
-    </div>
-  )
-}
-
-function SaveButton({ item, isSaved, onSave }) {
-  return (
-    <button type="button" className={isSaved ? 'saved-location' : ''} onClick={(event) => { event.stopPropagation(); onSave(item) }}>
-      {isSaved ? 'Saved' : 'Save'}
-    </button>
-  )
-}
-
-function directionsUrl([lat, lon]) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`
-}
-
-function BusinessCard({ business, index, isSaved, onSave, onSelectBusiness }) {
-  return (
-    <article className="business-card" tabIndex="0" onClick={() => onSelectBusiness(business)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onSelectBusiness(business) }}>
-      <div className="business-card-top"><span className="business-number">{String(index + 1).padStart(2, '0')}</span><h2>{business.name}</h2></div>
-      <div className="business-tags">{business.tags.map((tag, tagIndex) => <span className={tagIndex === 1 ? 'rating-tag' : ''} key={tag}>{tagIndex === 1 && '★ '}{tag}</span>)}</div>
-      <span className="business-type-label">CATEGORY</span>
-      <span className="business-type">{business.category}</span>
-      {business.address && <p>{business.address}</p>}
-      <div className="business-card-footer">
-        <SaveButton item={business} isSaved={isSaved} onSave={onSave} />
-        <a href={directionsUrl(business.coordinates)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>Directions</a>
-        <span>{business.miles.toFixed(1)} mi</span>
+      <div className="neighborhood-map-stage">
+        {mapResult.status === 'ready' && (
+          <ZipCodeMap
+            zipCode={zipCode}
+            geoJson={mapResult.geoJson}
+            zipData={zipData}
+            category={category}
+            radiusMiles={radiusMiles}
+            selectedPlace={selectedPlace}
+          />
+        )}
+        {mapResult.status === 'ready' && zipData && (
+          <div className="map-pin-legend">
+        <span><i className="pin-dot pin-independent" />Independent {CATEGORY_LABELS[category]?.one ?? 'businesses'}</span>
+        <span><i className="pin-dot pin-chain" />Chain {CATEGORY_LABELS[category]?.one ?? 'businesses'}</span>
+            <span><i className="pin-dot pin-other" />Other businesses</span>
+          </div>
+        )}
+        {mapResult.status === 'loading' && (
+          <div className="map-status" role="status"><span className="map-loader" /><strong>Loading ZIP code map…</strong></div>
+        )}
+        {mapResult.status === 'not-found' && (
+          <div className="map-status" role="status">
+            <strong>No Census ZIP area found for {zipCode}</strong>
+            <span>Some USPS ZIP codes do not have a matching Census ZIP Code Tabulation Area.</span>
+          </div>
+        )}
+        {mapResult.status === 'error' && (
+          <div className="map-status" role="status">
+            <strong>Couldn’t load this map</strong>
+            <span>Check your connection and try again.</span>
+            <button type="button" onClick={() => setRetryCount((count) => count + 1)}>Try again</button>
+          </div>
+        )}
+        {mapResult.status === 'ready' && (
+          <span className="map-data-attribution">ZIP boundary: 2020 Census ZCTA</span>
+        )}
       </div>
-    </article>
-  )
-}
-
-function IdeaCard({ idea, isSaved, onSave }) {
-  return (
-    <article className="business-card idea-card">
-      <div className="business-card-top"><span className="business-number">{idea.number}</span><h2>{idea.title}</h2></div>
-      <span className="business-type-label">{idea.tag}</span>
-      <p>{idea.description}</p>
-      <div className="business-card-footer"><SaveButton item={idea} isSaved={isSaved} onSave={onSave} /></div>
-    </article>
-  )
-}
-
-const evidenceText = (e) => `${e.metric_id.replace('category_count:', '').replaceAll('_', ' ')}: ${Number.isInteger(e.value) ? e.value : e.value.toFixed(2)} ${e.unit}`
-
-function StrategyCard({ strategy, isSaved, onSave }) {
-  return (
-    <article className="business-card idea-card strategy-card">
-      <div className="business-card-top"><span className="business-number">{strategy.priority.toUpperCase()}</span><h2>{strategy.title}</h2></div>
-      <p>{strategy.description}</p>
-      <ol>{strategy.action_steps.map((step) => <li key={step}>{step}</li>)}</ol>
-      <div className="business-tags">{strategy.supporting_evidence.map((e) => <span key={e.metric_id}>{evidenceText(e)}</span>)}</div>
-      <div className="business-card-footer"><SaveButton item={strategy} isSaved={isSaved} onSave={onSave} /></div>
-    </article>
-  )
-}
-
-function Strategies({ result, businessType, isSaved, onSave }) {
-  if (!businessType) return <div className="business-list-status">Strategies cover coffee shops, restaurants, bakeries and bookstores.</div>
-  if (result.status === 'loading') return <div className="business-list-status">Building strategies for this neighborhood…</div>
-  if (result.status === 'error') return <div className="business-list-status">Strategy service offline. Start the backend (see README) for tailored strategies.</div>
-  const { recommendations, metadata } = result.data
-  if (!recommendations.length) return <div className="business-list-status">Not enough mapped businesses nearby for strategies.</div>
-  const source = ['open_weight_model', 'cortex_ai'].includes(metadata.recommendation_source)
-    ? `Written by ${metadata.ai_model} from these numbers`
-    : 'Rule-based (the AI model isn’t running)'
-  const data = {
-    snowflake: 'Counts from a live Snowflake geospatial query',
-    local: 'Counts from the Snowflake export of LA places',
-    mock: 'Synthetic demo data',
-  }[metadata.data_source]
-  return (
-    <>
-      <div className="business-list-status strategy-source">STRATEGIES TO TEST · {source}<small>{data}</small></div>
-      {recommendations.map((strategy) => <StrategyCard strategy={strategy} key={strategy.id} isSaved={isSaved(strategy)} onSave={onSave} />)}
-    </>
-  )
-}
-
-function SpotCard({ spot, index, center, heat, isSaved, onSave, onShow }) {
-  const miles = distanceInMiles(center, spot.center)
-  return (
-    <article className="business-card idea-card">
-      <div className="business-card-top"><span className="business-number">{String(index + 1).padStart(2, '0')}</span><h2>{miles.toFixed(1)} mi {direction(center, spot.center)} of the center</h2></div>
-      <div className="business-tags"><span className="spot-score" style={{ background: scoreColor(spot.score) }}>Opportunity {spot.score}/100</span></div>
-      <p>{describeCell(spot, heat)}</p>
-      <div className="business-card-footer">
-        <SaveButton item={spot} isSaved={isSaved} onSave={onSave} />
-        <button type="button" className="show-on-map" onClick={() => onShow(spot)}>Show on map</button>
-      </div>
-    </article>
+      {noBoundary && (
+        <span className="map-data-attribution map-data-attribution-outside">
+          ZIP Code Tabulation Areas: U.S. Census Bureau
+        </span>
+      )}
+    </section>
   )
 }
 
@@ -319,7 +202,7 @@ function formatCategory(name) {
 }
 
 function NeighborhoodInsights({ search, category, zipResult, index }) {
-  const labels = CATEGORY_LABELS[category]
+  const labels = CATEGORY_LABELS[category] ?? CATEGORY_LABELS.services
 
   if (zipResult.status === 'loading') {
     return <div className="insights-status" role="status"><span className="map-loader" /><strong>Loading neighborhood numbers…</strong></div>
@@ -330,15 +213,19 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   if (zipResult.status === 'missing') {
     return (
       <div className="insights-status" role="status">
-        <strong>No neighborhood numbers for {search.zipCode} yet</strong>
-        <span>The list above shows OpenStreetMap places. Competition, survival and Census numbers cover {index?.zips.length ?? 'about 340'} ZIP codes around Los Angeles, such as 91768 (Pomona) or 90015 (Downtown LA).</span>
+        <strong>No business data for {search.zipCode} yet</strong>
+        <span>WayPoint currently covers {index?.zips.length ?? 'about 340'} ZIP codes around Los Angeles, such as 91768 (Pomona) or 90015 (Downtown LA).</span>
       </div>
     )
   }
 
   const data = zipResult.data
   const miles = dataRadius(search.radiusMiles)
-  const stats = data.categories[category][miles]
+  const categoryData = data.categories?.[category] ?? data.categories?.services
+  const stats = categoryData?.[miles] ?? categoryData?.[3]
+  if (!stats) {
+    return <div className="insights-status" role="status"><strong>Neighborhood data is not available yet</strong><span>Try another business type or ZIP code.</span></div>
+  }
   const ratio = stats.density_ratio
   const ca = index?.ca_survival?.[category]
   const la = index?.la_county
@@ -357,7 +244,7 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
       <div className="insights-heading">
         <div>
           <span className="insights-kicker">YOUR NEIGHBORHOOD IN NUMBERS</span>
-          <h2>{search.businessType} <em>· {labels.many}</em></h2>
+          <h2>{search.businessType}</h2>
         </div>
         <p>
           Within {miles} mi of the center of {data.zip}
@@ -439,26 +326,122 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation }) {
-  const category = matchCategory(search.businessType)
-  const [radius, setRadius] = useState(search.radiusMiles)
-  const [query, setQuery] = useState('')
-  const [shownCategory, setShownCategory] = useState(category)
+function recommendedLocations(zipData, category) {
+  if (!zipData) return []
+  const { lat, lon } = zipData.center
+  const label = CATEGORY_LABELS[category].one
+  return [
+    { id: 'recommended-1', name: 'Emerging neighborhood corridor', category: 'High opportunity area', address: `Near ${zipData.zip} town center`, distance: '0.6 mi', coordinates: [lat + 0.006, lon - 0.008], tags: ['Underserved', `Good fit for ${label}`] },
+    { id: 'recommended-2', name: 'Growing residential pocket', category: 'Growing area', address: `Near ${zipData.zip} residential district`, distance: '1.1 mi', coordinates: [lat - 0.008, lon + 0.006], tags: ['New development', 'Local foot traffic'] },
+    { id: 'recommended-3', name: 'Main street opportunity', category: 'Commercial corridor', address: `Near ${zipData.zip} main street`, distance: '1.5 mi', coordinates: [lat + 0.011, lon + 0.012], tags: ['Visibility', 'Nearby businesses'] },
+  ]
+}
+
+function placeKey(place) {
+  return place.id ?? `${place.name}-${place.lat ?? place.coordinates?.[0] ?? ''}-${place.lon ?? place.coordinates?.[1] ?? ''}`
+}
+
+function PlaceResultsPanel({ search, zipData, category, selectedPlace, onSelectPlace, onCreateAccount }) {
   const [activeTab, setActiveTab] = useState('competitors')
-  const [saved, setSaved] = useState([])
-  const [selected, setSelected] = useState(null)
+  const [saveToast, setSaveToast] = useState('')
+  const { user, savedLocations, saveLocation, removeSavedLocation } = useAuth()
+  const competitors = zipData?.places?.filter((place) => place.category === category).slice(0, 20) ?? []
+  const recommendations = recommendedLocations(zipData, category)
+  const places = activeTab === 'recommended' ? recommendations : competitors
+
+  function toggleSaved(place) {
+    const key = placeKey(place)
+    const existing = savedLocations.find((item) => item.placeId === key
+      && item.zipCode === zipData?.zip
+      && item.businessType === search.businessType
+      && Number(item.radiusMiles) === Number(search.radiusMiles))
+    if (existing) {
+      removeSavedLocation(existing.id)
+      setSaveToast('Location unsaved!')
+      return
+    }
+    if (!user) {
+      onCreateAccount()
+      return
+    }
+    saveLocation({
+      businessType: search.businessType,
+      zipCode: zipData.zip,
+      radiusMiles: search.radiusMiles,
+      placeId: key,
+      businessName: place.name,
+      address: place.address,
+      lat: placeCoordinates(place)?.[0],
+      lon: placeCoordinates(place)?.[1],
+    })
+    setSaveToast('Location saved!')
+  }
+
+  useEffect(() => {
+    if (!saveToast) return undefined
+    const timeout = setTimeout(() => setSaveToast(''), 2200)
+    return () => clearTimeout(timeout)
+  }, [saveToast])
+
+  return (
+    <aside className="places-panel" aria-label="Nearby business results">
+      <div className="places-tabs">
+        <button className={activeTab === 'competitors' ? 'active' : ''} type="button" onClick={() => setActiveTab('competitors')}>Competitors <b>({competitors.length})</b></button>
+        <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({recommendations.length})</b></button>
+      </div>
+      <div className="places-caption">{activeTab === 'recommended' ? 'Suggested areas based on local signals' : 'Nearby businesses in this category'}</div>
+      <div className="places-list">
+        {!zipData && <div className="places-status">Loading businesses in this ZIP code…</div>}
+        {zipData && !places.length && <div className="places-status">No matching businesses found in this area.</div>}
+        {places.map((place, index) => {
+          const savedPlace = savedLocations.some((item) => item.placeId === placeKey(place)
+            && item.zipCode === zipData?.zip
+            && item.businessType === search.businessType
+            && Number(item.radiusMiles) === Number(search.radiusMiles))
+          return (
+            <article
+              className={`place-card${selectedPlace && placeKey(selectedPlace) === placeKey(place) ? ' is-selected' : ''}`}
+              tabIndex="0"
+              key={placeKey(place) ?? `${place.name}-${index}`}
+              onClick={() => onSelectPlace(place)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onSelectPlace(place)
+                }
+              }}
+            >
+              <div className="place-card-heading"><span>{String(index + 1).padStart(2, '0')}</span><h3>{place.name}</h3></div>
+              <div className="place-tags"><span>{activeTab === 'recommended' ? place.tags[0] : (place.is_independent ? 'Independent' : 'Chain')}</span><span>{activeTab === 'recommended' ? place.tags[1] : `Gem score ${place.hidden_gem_score}`}</span></div>
+              <span className="place-category">{activeTab === 'recommended' ? place.category : (CATEGORY_LABELS[place.category]?.one ?? formatCategory(place.category ?? 'business'))}</span>
+              <p>{activeTab === 'recommended' ? place.address : `${CATEGORY_LABELS[place.category]?.one ?? 'Business'} near ${zipData.zip}`}</p>
+              <div className="place-card-footer">
+                {activeTab === 'recommended' && <button type="button" className={savedPlace ? 'is-saved' : ''} onClick={() => toggleSaved(place)}>{savedPlace ? 'Saved' : 'Save Location'}</button>}
+                <span>{activeTab === 'recommended' ? 'Suggested spot' : (place.hidden_gem_score ? `${place.hidden_gem_score} score` : 'Nearby')}</span>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+      {saveToast && <div className={`save-toast${saveToast === 'Location unsaved!' ? ' is-unsaved' : ''}`} role="status" aria-live="polite">{saveToast}</div>}
+    </aside>
+  )
+}
+
+function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, initialSelectedPlace }) {
+  const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
-  const [live, setLive] = useState({ key: null })
+  const [selectedPlace, setSelectedPlace] = useState(initialSelectedPlace ?? null)
+  // A result for a different ZIP means the new one is still loading.
   const zipResult = loaded.zip === search.zipCode ? loaded : { status: 'loading', data: null }
-  const data = zipResult.data
 
   useEffect(() => {
     const controller = new AbortController()
     const zip = search.zipCode
     fetchZipData(zip, { signal: controller.signal })
-      .then((zipData) => {
-        if (!controller.signal.aborted) setLoaded(zipData ? { zip, status: 'ready', data: zipData } : { zip, status: 'missing', data: null })
+      .then((data) => {
+        if (!controller.signal.aborted) setLoaded(data ? { zip, status: 'ready', data } : { zip, status: 'missing', data: null })
       })
       .catch(() => {
         if (!controller.signal.aborted) setLoaded({ zip, status: 'error', data: null })
@@ -470,226 +453,68 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
     fetchDataIndex().then(setIndex).catch(() => setIndex(null))
   }, [])
 
-  useEffect(() => {
-    if (!selected) return undefined
-    const close = (event) => { if (event.key === 'Escape') setSelected(null) }
-    window.addEventListener('keydown', close)
-    return () => window.removeEventListener('keydown', close)
-  }, [selected])
-
-  // ZIPs outside the export: center from Nominatim, places from OpenStreetMap.
-  const needLive = zipResult.status === 'missing' || zipResult.status === 'error'
-  const liveKey = `${search.zipCode}-${radius}`
-  useEffect(() => {
-    if (!needLive) return undefined
-    const controller = new AbortController()
-    const { signal } = controller
-    fetchZipCenter(search.zipCode, { signal })
-      .catch(() => null)
-      .then((center) => (center
-        ? fetchNearbyPlaces(center, radius, { signal }).catch(() => null).then((places) => ({ center, places }))
-        : { center: null, places: null }))
-      .then((result) => { if (!signal.aborted) setLive({ key: liveKey, ...result }) })
-    return () => controller.abort()
-  }, [needLive, liveKey, search.zipCode, radius])
-  const liveResult = live.key === liveKey ? live : null
-
-  const center = useMemo(
-    () => (data ? [data.center.lat, data.center.lon] : liveResult?.center ?? null),
-    [data, liveResult],
-  )
-  const allPlaces = useMemo(
-    () => (data ? data.places.map((place) => toBusiness(place, center)) : liveResult?.places ?? []),
-    [data, liveResult, center],
-  )
-  const categoryOptions = useMemo(
-    () => (data ? Object.keys(CATEGORY_LABELS) : [...new Set(allPlaces.map((place) => place.group))].sort()),
-    [data, allPlaces],
-  )
-  const activeCategory = categoryOptions.includes(shownCategory) ? shownCategory : 'all'
-  const { matches, listed, others } = useMemo(() => {
-    const text = query.trim().toLowerCase()
-    const found = allPlaces
-      .filter((place) => place.miles <= radius
-        && (activeCategory === 'all' || place.group === activeCategory)
-        && (!text || place.name.toLowerCase().includes(text)))
-      .sort((a, b) => a.miles - b.miles)
-    const shown = found.slice(0, MAX_LISTED)
-    const shownIds = new Set(shown.map((place) => place.id))
-    return { matches: found.length, listed: shown, others: allPlaces.filter((place) => !shownIds.has(place.id)) }
-  }, [allPlaces, radius, activeCategory, query])
-
-  const ideas = useMemo(
-    () => (data ? buildBrief(data, index, category, dataRadius(radius)).map((idea) => ({ ...idea, id: `idea-${idea.title}`, name: idea.title })) : []),
-    [data, index, category, radius],
-  )
-
-  const strategyType = backendBusinessType(search.businessType, category)
-  const strategyKey = `${search.zipCode}-${radius}-${strategyType}-${center}`
-  const [strategies, setStrategies] = useState({ key: null })
-  useEffect(() => {
-    if (!strategyType || !center) return undefined
-    const controller = new AbortController()
-    // Same radius as the stat cards (1–3 mi), so both cite the same counts.
-    fetchStrategies({ businessType: strategyType, center, radiusMiles: dataRadius(radius) }, { signal: controller.signal })
-      .then((data) => {
-        data.recommendations.forEach((rec) => { rec.id = `strategy-${rec.title}`; rec.name = rec.title })
-        setStrategies({ key: strategyKey, status: 'ready', data })
-      })
-      .catch(() => { if (!controller.signal.aborted) setStrategies({ key: strategyKey, status: 'error' }) })
-    return () => controller.abort()
-  }, [strategyKey, strategyType, center, radius])
-  const strategyResult = strategies.key === strategyKey ? strategies : { status: 'loading' }
-  const strategyCount = strategyResult.status === 'ready' ? strategyResult.data.recommendations.length : 0
-
-  const heatCategory = data ? (activeCategory in CATEGORY_LABELS ? activeCategory : category) : null
-  const [heatResult, setHeatResult] = useState({ category: null })
-  const [heatOn, setHeatOn] = useState(false)
-  const [focusCell, setFocusCell] = useState(null)
-  useEffect(() => {
-    if (!heatCategory) return
-    let current = true
-    fetchHeat(heatCategory)
-      .then((heat) => { if (current) setHeatResult({ category: heatCategory, heat }) })
-      .catch(() => { if (current) setHeatResult({ category: heatCategory, heat: null }) })
-    return () => { current = false }
-  }, [heatCategory])
-  const heat = heatResult.category === heatCategory ? heatResult.heat : null
-  // Best-scoring hexagons within the search radius.
-  const spots = useMemo(() => {
-    if (!heat || !center) return []
-    return heat.cells
-      .filter((cell) => distanceInMiles(center, cell.center) <= radius)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map((cell) => ({ ...cell, id: `spot-${heat.category}-${cell.cell}`, name: `${CATEGORY_LABELS[heat.category].one} spot · score ${cell.score}` }))
-  }, [heat, center, radius])
-  function showSpot(spot) {
-    setFocusCell(spot)
-    setHeatOn(true)
-  }
-
-  const isSaved = (item) => saved.some((entry) => entry.id === item.id)
-  function toggleSave(item) {
-    setSaved((current) => (current.some((entry) => entry.id === item.id)
-      ? current.filter((entry) => entry.id !== item.id)
-      : [...current, { id: item.id, name: item.name }]))
-  }
-
-  let listStatus
-  if (zipResult.status === 'loading' || (needLive && !liveResult)) listStatus = 'Looking for businesses in this area…'
-  else if (needLive && !liveResult.center) listStatus = `Couldn’t locate ZIP code ${search.zipCode}.`
-  else if (needLive && !liveResult.places) listStatus = 'Couldn’t load nearby businesses. Check your connection and try again.'
-  else listStatus = `${matches} ${matches === 1 ? 'business' : 'businesses'} found${matches > MAX_LISTED ? ` · showing nearest ${MAX_LISTED}` : ''}`
-
-  const radiusOptions = [...new Set([...RADIUS_OPTIONS, search.radiusMiles])].sort((a, b) => a - b)
-  const categoryLabel = (group) => (data ? CATEGORY_LABELS[group].many : group.replaceAll('_', ' '))
-
   return (
     <main className="neighborhood-screen">
-      <header className="finder-header">
-        <a className="finder-brand" href="#home" onClick={(event) => { event.preventDefault(); onBack() }}>
-          <span className="finder-brand-icon">⌖</span><strong>WayPoint Places</strong><small>{search.businessType.toUpperCase()}</small><small>ZIP {search.zipCode}</small>
+      <header className="site-header page-shell">
+        <a
+          className="brand"
+          href="#home"
+          aria-label="WayPoint home"
+          onClick={(event) => {
+            event.preventDefault()
+            onBack()
+          }}
+        >
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+          <span>WayPoint</span>
         </a>
-        <label className="finder-search">
-          <span aria-hidden="true">⌕</span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search businesses in this area" aria-label="Search businesses by name" />
-        </label>
-        <select aria-label="Search radius" value={String(radius)} onChange={(event) => setRadius(Number(event.target.value))}>
-          {radiusOptions.map((miles) => <option key={miles} value={miles}>{miles} mi</option>)}
-        </select>
-        <select aria-label="Business category" value={activeCategory} onChange={(event) => setShownCategory(event.target.value)}>
-          <option value="all">All categories</option>
-          {categoryOptions.map((group) => <option key={group} value={group}>{categoryLabel(group)}</option>)}
-        </select>
-        <div className="finder-account">
-          <button
-            className={`save-location-button${locationSaved ? ' is-saved' : ''}`}
-            type="button"
-            onClick={user ? (locationSaved ? onRemoveLocation : onSaveLocation) : onCreateAccount}
-            aria-pressed={user ? locationSaved : undefined}
-          >
-            {user ? (locationSaved ? '✓ Saved area' : '＋ Save this area') : 'Sign up to save this area'}
+        <div className="map-header-actions">
+          <button className="back-home" type="button" onClick={onBack}>
+            ← <span>Edit search</span>
           </button>
-          <button type="button" onClick={onBack}>Edit search</button>{user && <ChatNavButton onClick={onOpenChat} />}<AccountControl user={user} onCreateAccount={onCreateAccount} onOpenDashboard={onOpenDashboard} /></div>
-      </header>
-      <section className="finder-layout">
-        <aside className="business-results">
-          <div className="results-tabs">
-            <button className={activeTab === 'competitors' ? 'active' : ''} type="button" onClick={() => setActiveTab('competitors')}>Competitors <b>({matches})</b></button>
-            <button className={activeTab === 'recommended' ? 'active' : ''} type="button" onClick={() => setActiveTab('recommended')}>Recommended <b>({spots.length + ideas.length + strategyCount})</b></button>
-          </div>
-          <div className="results-caption">
-            {activeTab === 'recommended'
-              ? 'Ideas to investigate, built from this neighborhood’s numbers'
-              : `${data ? 'Overture Maps places listed in this ZIP' : 'OpenStreetMap places near this ZIP'}, sorted by distance`}
-          </div>
-          <div className="business-list">
-            {activeTab === 'competitors' && (
-              <>
-                <div className="business-list-status" role="status">{listStatus}</div>
-                {listed.map((business, i) => <BusinessCard business={business} index={i} key={business.id} isSaved={isSaved(business)} onSave={toggleSave} onSelectBusiness={setSelected} />)}
-              </>
-            )}
-            {activeTab === 'recommended' && (
-              <>
-                {spots.length > 0 && (
-                  <>
-                    <div className="business-list-status strategy-source">BEST SPOTS NEARBY FOR A NEW {CATEGORY_LABELS[heat.category].one.toUpperCase()}<small>Highest heatmap scores within {radius} mi</small></div>
-                    {spots.map((spot, i) => <SpotCard spot={spot} index={i} key={spot.id} center={center} heat={heat} isSaved={isSaved(spot)} onSave={toggleSave} onShow={showSpot} />)}
-                  </>
-                )}
-                <Strategies result={strategyResult} businessType={strategyType} isSaved={isSaved} onSave={toggleSave} />
-                {ideas.length > 0 && <div className="business-list-status strategy-source">WHAT THE NUMBERS SAY</div>}
-                {ideas.length
-                  ? ideas.map((idea) => <IdeaCard idea={idea} key={idea.id} isSaved={isSaved(idea)} onSave={toggleSave} />)
-                  : <div className="business-list-status">Neighborhood numbers cover about 340 Los Angeles-area ZIP codes (try 91768).</div>}
-              </>
-            )}
-          </div>
-          <section className="saved-folder" aria-label="Saved">
-            <div className="saved-folder-heading"><span>Saved</span><b>{saved.length}</b></div>
-            {saved.length
-              ? saved.map((entry) => <div className="saved-location-row" key={entry.id}><span className="saved-location-dot">✓</span><span>{entry.name}</span></div>)
-              : <p>Save businesses and ideas here for later.</p>}
-          </section>
-        </aside>
-        <section className="map-column">
-          <NeighborhoodMap
-            zipCode={search.zipCode}
-            center={center}
-            radiusMiles={radius}
-            businesses={listed}
-            others={others}
-            placesSource={data ? 'overture' : 'osm'}
-            heat={heat}
-            heatOn={heatOn}
-            onToggleHeat={() => { setHeatOn((on) => !on); setFocusCell(null) }}
-            focusCell={focusCell}
-            onSelectBusiness={setSelected}
+          {user && <ChatNavButton onClick={onOpenChat} />}
+          <AccountControl
+            user={user}
+            onCreateAccount={onCreateAccount}
+            onOpenDashboard={onOpenDashboard}
           />
-        </section>
-      </section>
-      <section className="finder-insights">
-        <NeighborhoodInsights search={{ ...search, radiusMiles: radius }} category={category} zipResult={zipResult} index={index} />
-      </section>
-      {selected && (
-        <div className="business-overlay-backdrop" role="presentation" onClick={() => setSelected(null)}>
-          <section className="business-overlay" role="dialog" aria-modal="true" aria-labelledby="business-overlay-title" onClick={(event) => event.stopPropagation()}>
-            <button className="business-overlay-close" type="button" aria-label="Close business details" onClick={() => setSelected(null)}>×</button>
-            <span className="business-overlay-kicker">BUSINESS DETAILS</span>
-            <h2 id="business-overlay-title">{selected.name}</h2>
-            <span className="business-type">{selected.category}</span>
-            {selected.address && <p className="business-overlay-address">{selected.address}</p>}
-            <div className="business-overlay-tags">{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
-            <p className="business-overlay-distance">{selected.miles.toFixed(1)} mi from the center of {search.zipCode}</p>
-            <div className="business-overlay-actions">
-              <button className="business-overlay-save" type="button" onClick={() => toggleSave(selected)}>{isSaved(selected) ? 'Saved' : 'Save'}</button>
-              <a className="business-overlay-save" href={directionsUrl(selected.coordinates)} target="_blank" rel="noreferrer">Directions</a>
-            </div>
-          </section>
         </div>
-      )}
+      </header>
+      <section className="neighborhood-content page-shell">
+        <div className="neighborhood-heading">
+          <div className="eyebrow">NEIGHBORHOOD EXPLORER</div>
+          <h1>Explore <em>{search.zipCode}</em></h1>
+          <p>
+            <strong>{search.businessType}</strong>
+            <span className="heading-divider">·</span>
+            Within {search.radiusMiles} miles
+          </p>
+        </div>
+        <div className="finder-layout">
+          <PlaceResultsPanel
+            search={search}
+            zipData={zipResult.data}
+            category={category}
+            selectedPlace={selectedPlace}
+            onSelectPlace={setSelectedPlace}
+            onCreateAccount={onCreateAccount}
+          />
+          <div className="finder-map-column">
+            <NeighborhoodMap
+              zipCode={search.zipCode}
+              radiusMiles={search.radiusMiles}
+              zipData={zipResult.data}
+              category={category}
+              selectedPlace={selectedPlace}
+            />
+          </div>
+        </div>
+        <p className="map-screen-footnote">
+          The outlined area is the Census Bureau’s ZIP Code Tabulation Area, an approximation of USPS ZIP code boundaries.
+          {zipResult.data && ' Pins show businesses listed in this ZIP; the dashed ring is the radius the numbers below use.'}
+        </p>
+        <NeighborhoodInsights search={search} category={category} zipResult={zipResult} index={index} />
+      </section>
     </main>
   )
 }

@@ -1,8 +1,22 @@
+import { useEffect, useState } from 'react'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import './DashboardPage.css'
 
 function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
+  const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timeout = setTimeout(() => setToast(''), 2200)
+    return () => clearTimeout(timeout)
+  }, [toast])
+
+  function handleRemoveSavedLocation(id) {
+    onRemoveSavedLocation(id)
+    setToast('Location unsaved!')
+  }
+
   return (
     <main className="dashboard-page">
       <header className="site-header page-shell">
@@ -78,11 +92,11 @@ function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMa
                 <article className="saved-location-card" key={location.id}>
                   <span className="saved-location-mark" aria-hidden="true">⌖</span>
                   <div className="saved-location-details">
-                    <strong>{location.businessType}</strong>
+                    <strong>{location.businessName ?? location.businessType}</strong>
                     <span>ZIP {location.zipCode} · within {location.radiusMiles} miles</span>
                   </div>
                   <button className="saved-location-open" type="button" onClick={() => onOpenSavedLocation(location)}>Open map <span>→</span></button>
-                  <button className="saved-location-remove" type="button" onClick={() => onRemoveSavedLocation(location.id)} aria-label={`Remove ${location.businessType} in ${location.zipCode}`}>×</button>
+                  <button className="saved-location-remove" type="button" onClick={() => handleRemoveSavedLocation(location.id)} aria-label={`Remove ${location.businessType} in ${location.zipCode}`}>×</button>
                 </article>
               ))}
             </div>
@@ -93,6 +107,7 @@ function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMa
 
         <p className="dashboard-demo-note">Demo mode: your signed-in email is remembered in this browser. Neighborhood search data is temporary and resets when you refresh.</p>
       </section>
+      {toast && <div className={`dashboard-toast${toast === 'Location unsaved!' ? ' is-unsaved' : ''}`} role="status" aria-live="polite">{toast}</div>}
     </main>
   )
 }

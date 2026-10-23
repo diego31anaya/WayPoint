@@ -2,21 +2,20 @@ import { useEffect, useState } from 'react'
 import AccountControl from './components/AccountControl'
 import ChatNavButton from './components/ChatNavButton'
 import AccountPage from './pages/AccountPage'
-import AboutDataPage from './pages/AboutDataPage'
 import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
-import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
+import { buildBrief, fetchDataIndex, fetchZipData, matchCategory } from './services/zipData'
 import { useAuth } from './context/useAuth'
-import { savedLocationId } from './services/savedLocations'
 import './App.css'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
 const FEATURED_ZIP = '91768'
-const FEATURED_CATEGORY = 'cafe'
 
-// Shown until the real brief for FEATURED_ZIP loads.
-const fallbackRecommendations = [
+// Shown until the featured neighborhood data loads.
+function fallbackRecommendations(businessType) {
+  const type = businessType.trim() || 'business'
+  return [
   {
     number: '01',
     tag: 'NEARBY WORKPLACES',
@@ -28,7 +27,7 @@ const fallbackRecommendations = [
   {
     number: '02',
     tag: 'LOCAL LANDSCAPE',
-    title: 'Find your own corner of coffee',
+    title: `Find your own corner of ${type}`,
     description:
       'Look for product or service categories that appear less represented nearby.',
     icon: '⌕',
@@ -41,7 +40,8 @@ const fallbackRecommendations = [
       'Consider a study-friendly bundle around nearby schools and colleges.',
     icon: '✳',
   },
-]
+  ]
+}
 
 function NeighborhoodIllustration({ zipCode }) {
   return (
@@ -83,26 +83,36 @@ function NeighborhoodIllustration({ zipCode }) {
 }
 
 function App() {
-  const [businessType, setBusinessType] = useState('Coffee shop')
+  const [businessType, setBusinessType] = useState('')
   const [zipCode, setZipCode] = useState('')
   const [radius, setRadius] = useState('3')
   const [message, setMessage] = useState('')
   const [activeSearch, setActiveSearch] = useState(null)
-  // #about-the-data opens the data story directly (handy for demos and slides).
-  const [currentPage, setCurrentPage] = useState(() => (window.location.hash === '#about-the-data' ? 'about' : 'home'))
+  const [activeSavedPlace, setActiveSavedPlace] = useState(null)
+  const [currentPage, setCurrentPage] = useState('home')
   const [returnPage, setReturnPage] = useState('home')
-  const [brief, setBrief] = useState(null)
+  const [featuredData, setFeaturedData] = useState(null)
+  const [dataIndex, setDataIndex] = useState(null)
 
   useEffect(() => {
     Promise.all([fetchZipData(FEATURED_ZIP), fetchDataIndex()])
       .then(([zipData, index]) => {
-        if (zipData) setBrief({ zip: zipData.zip, ideas: buildBrief(zipData, index, FEATURED_CATEGORY) })
+        setFeaturedData(zipData)
+        setDataIndex(index)
       })
       .catch(() => {})  // keep the fallback cards
   }, [])
-  const recommendations = brief?.ideas ?? fallbackRecommendations
+  const businessCategory = matchCategory(businessType)
+  let recommendations = fallbackRecommendations(businessType)
+  if (featuredData) {
+    try {
+      recommendations = buildBrief(featuredData, dataIndex, businessCategory)
+    } catch {
+      recommendations = fallbackRecommendations(businessType)
+    }
+  }
   const [chatReturnPage, setChatReturnPage] = useState('home')
-  const { user: currentUser, signIn, signOut, savedLocations, saveLocation, removeSavedLocation } = useAuth()
+  const { user: currentUser, signIn, signOut, savedLocations, removeSavedLocation } = useAuth()
 
   function handleOpenChat() {
     setChatReturnPage(currentPage)
@@ -120,6 +130,7 @@ function App() {
       zipCode: location.zipCode,
       radiusMiles: location.radiusMiles,
     })
+    setActiveSavedPlace(location)
     setCurrentPage('neighborhood')
   }
 
@@ -143,28 +154,8 @@ function App() {
       zipCode,
       radiusMiles: Number(radius),
     })
+    setActiveSavedPlace(null)
     setCurrentPage('neighborhood')
-  }
-
-  function openAbout(event) {
-    event?.preventDefault()
-    setCurrentPage('about')
-    window.scrollTo(0, 0)
-  }
-
-  if (currentPage === 'about') {
-    return (
-      <AboutDataPage
-        user={currentUser}
-        onBack={() => { setCurrentPage('home'); window.scrollTo(0, 0) }}
-        onExplore={() => {
-          setCurrentPage('home')
-          requestAnimationFrame(() => document.getElementById('get-started')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-        }}
-        onCreateAccount={handleCreateAccount}
-        onOpenDashboard={() => setCurrentPage('dashboard')}
-      />
-    )
   }
 
   if (currentPage === 'account') {
@@ -180,7 +171,7 @@ function App() {
   }
 
   if (currentPage === 'chat' && currentUser) {
-    return <ChatPage user={currentUser} search={activeSearch} onBack={() => setCurrentPage(chatReturnPage)} />
+    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
   }
 
   if (currentPage === 'dashboard') {
@@ -190,8 +181,14 @@ function App() {
           user={currentUser}
           activeSearch={activeSearch}
           savedLocations={savedLocations}
-          onExplore={() => setCurrentPage(activeSearch ? 'neighborhood' : 'home')}
-          onViewMap={() => setCurrentPage('neighborhood')}
+          onExplore={() => {
+            setActiveSavedPlace(null)
+            setCurrentPage(activeSearch ? 'neighborhood' : 'home')
+          }}
+          onViewMap={() => {
+            setActiveSavedPlace(null)
+            setCurrentPage('neighborhood')
+          }}
           onOpenSavedLocation={handleOpenSavedLocation}
           onRemoveSavedLocation={removeSavedLocation}
           onOpenChat={handleOpenChat}
@@ -214,9 +211,7 @@ function App() {
           onCreateAccount={handleCreateAccount}
           onOpenDashboard={() => setCurrentPage('dashboard')}
           onOpenChat={handleOpenChat}
-          locationSaved={savedLocations.some((location) => location.id === savedLocationId(activeSearch))}
-          onSaveLocation={() => saveLocation(activeSearch)}
-          onRemoveLocation={() => removeSavedLocation(savedLocationId(activeSearch))}
+          initialSelectedPlace={activeSavedPlace}
         />
       </>
     )
@@ -233,7 +228,6 @@ function App() {
         <nav className="main-nav" aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#insights">What you’ll see</a>
-          <a href="#about-the-data" onClick={openAbout}>About the data</a>
         </nav>
         <div className="home-header-actions">
           {currentUser && <ChatNavButton onClick={handleOpenChat} />}
@@ -318,8 +312,8 @@ function App() {
         </div>
         <div className="insights-layout">
           <div className="insight-panel">
-            <div className="panel-header"><span>AN EXAMPLE NEIGHBORHOOD BRIEF</span><span className="sample-pill">{brief ? `REAL DATA · ${brief.zip}` : 'ILLUSTRATIVE'}</span></div>
-            <div className="brief-title"><span className="brief-icon">☕</span><span><strong>Independent coffee shop</strong><small>{brief ? `Pomona, ${brief.zip} · within 2 miles` : 'Example opportunities to investigate'}</small></span></div>
+            <div className="panel-header"><span>AN EXAMPLE NEIGHBORHOOD BRIEF</span><span className="sample-pill">{featuredData ? `REAL DATA · ${featuredData.zip}` : 'ILLUSTRATIVE'}</span></div>
+            <div className="brief-title"><span className="brief-icon">⌖</span><span><strong>{businessType ? `Independent ${businessType}` : 'Your business'}</strong><small>{featuredData ? `Pomona, ${featuredData.zip} · within 2 miles` : 'Enter your business type to personalize this brief'}</small></span></div>
             <div className="recommendation-list">
               {recommendations.map((item) => (
                 <article className="recommendation" key={item.number}>
@@ -329,7 +323,7 @@ function App() {
                 </article>
               ))}
             </div>
-            <p className="panel-footnote">Ideas are starting points based on available neighborhood indicators—not predictions of customer demand or sales.{brief && ' Sources: Overture Maps, SafeGraph Open Census.'}</p>
+            <p className="panel-footnote">Ideas are starting points based on available neighborhood indicators—not predictions of customer demand or sales.{featuredData && ' Sources: Overture Maps, SafeGraph Open Census.'}</p>
           </div>
           <aside className="how-card" id="how-it-works">
             <span className="how-number">01 — 03</span>
@@ -343,7 +337,7 @@ function App() {
 
       <footer className="site-footer page-shell">
         <a className="brand" href="#home" aria-label="WayPoint home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>WayPoint</span></a>
-        <span>Built for the businesses that make a neighborhood. <a href="#about-the-data" className="footer-about" onClick={openAbout}>About the data</a></span>
+        <span>Built for the businesses that make a neighborhood.</span>
         <a href="#home" className="back-top">Back to top ↑</a>
       </footer>
       </main>

@@ -1,4 +1,7 @@
 .dashboard-page { min-height: 100vh; background: #fbfaf6; }
+.dashboard-toast { position: fixed; top: 24px; left: 50%; z-index: 1000; transform: translateX(-50%); padding: 11px 18px; border: 1px solid #8bd39a; border-radius: 6px; background: #2fb344; color: #fff; box-shadow: 0 8px 20px #1d7a2e40; font: 700 11px var(--sans); animation: dashboard-toast-in-out 2.2s ease forwards; }
+.dashboard-toast.is-unsaved { border-color: #ef9a9a; background: #d64545; box-shadow: 0 8px 20px #a52a2a40; }
+@keyframes dashboard-toast-in-out { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .dashboard-header-actions { display: flex; align-items: center; gap: 14px; }
 .dashboard-signout { border: 0; background: transparent; color: #74796e; font: 650 10px var(--sans); cursor: pointer; }
 .dashboard-signout:hover { color: var(--orange); }

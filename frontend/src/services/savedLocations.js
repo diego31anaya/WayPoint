@@ -1,7 +1,12 @@
 const LOCATION_KEY_PREFIX = 'waypoint-saved-locations-v1:'
 
 export function savedLocationId(location) {
-  return [location.zipCode, location.businessType.trim().toLowerCase(), Number(location.radiusMiles)].join('|')
+  return [
+    location.zipCode,
+    location.businessType.trim().toLowerCase(),
+    Number(location.radiusMiles),
+    location.placeId ?? 'area',
+  ].join('|')
 }
 
 export function readSavedLocations(email) {
