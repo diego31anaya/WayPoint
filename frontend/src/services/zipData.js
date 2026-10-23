@@ -53,3 +53,54 @@ export const CATEGORY_LABELS = {
 export function dataRadius(radiusMiles) {
   return Math.min(3, Math.max(1, Math.round(radiusMiles)))
 }
+
+const percentText = (rate) => `${(rate * 100).toFixed(1)}%`
+const readable = (name) => name.replaceAll('_', ' ')
+
+// Four idea cards for the home page, each quoting its own numbers.
+export function buildBrief(zipData, index, category, miles = 2) {
+  const labels = CATEGORY_LABELS[category]
+  const stats = zipData.categories[category][miles]
+  const people = zipData.demographics
+  const ca = index?.ca_survival?.[category]
+  const ratio = stats.density_ratio
+  const ideas = []
+
+  if (ratio != null) {
+    const diff = Math.round(Math.abs(1 - ratio) * 100)
+    ideas.push({
+      tag: 'LOCAL LANDSCAPE',
+      title: ratio < 0.95 ? `Room for more ${labels.many} near ${zipData.zip}` : ratio > 1.05 ? `A crowded ${labels.one} corner` : `A balanced ${labels.one} scene`,
+      description: `${stats.competitors} ${labels.many} within ${miles} mi, ${diff ? `${diff}% ${ratio < 1 ? 'fewer' : 'more'}` : 'about the same'} per km² than the surrounding 10 km.`,
+      icon: '⌕',
+    })
+  }
+  ideas.push({
+    tag: 'COMPETITION',
+    title: `${stats.independent} of ${stats.competitors} nearby ${labels.many} are independent`,
+    description: stats.nearest.length ? `Closest to the center of ${zipData.zip}: ${stats.nearest.slice(0, 3).join(', ')}.` : `No ${labels.many} within ${miles} mi.`,
+    icon: '↗',
+  })
+  if (ca?.ca_most_durable.length) {
+    const [best, next] = ca.ca_most_durable
+    const worst = ca.ca_least_durable[0]
+    ideas.push({
+      tag: 'WHAT LASTS',
+      title: `${readable(best.category)[0].toUpperCase()}${readable(best.category).slice(1)}s close least often`,
+      description: `In California, ${readable(best.category)} (${percentText(best.closure_rate)})${next ? ` and ${readable(next.category)} (${percentText(next.closure_rate)})` : ''} have the lowest closure rates${worst ? `; ${readable(worst.category)} the highest (${percentText(worst.closure_rate)})` : ''}.`,
+      icon: '✳',
+    })
+  }
+  if (people.population) {
+    ideas.push({
+      tag: 'COMMUNITY MIX',
+      title: `${people.population.toLocaleString()} neighbors within ${Math.round(people.radius_m / 1609.34)} mi`,
+      description: [
+        people.median_age && `Median age ${people.median_age}`,
+        people.median_household_income && `median household income $${people.median_household_income.toLocaleString()}`,
+      ].filter(Boolean).join(', ') + ' (ACS 2019).',
+      icon: '◎',
+    })
+  }
+  return ideas.map((idea, i) => ({ ...idea, number: String(i + 1).padStart(2, '0') }))
+}
