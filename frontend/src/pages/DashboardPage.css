@@ -33,6 +33,22 @@
 .dashboard-recent-card > span:not(.stat-label) { margin-top: 5px; color: #858a80; font-size: 9px; }
 .dashboard-recent-card button { margin-top: auto; padding: 0; background: transparent; color: var(--green); }
 .dashboard-recent-card button:hover { color: #294a38; }
+.saved-locations { margin-top: 30px; }
+.saved-locations-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.saved-locations-heading h2 { margin: 6px 0 0; color: var(--ink); font: 500 25px/1.1 var(--serif); }
+.saved-locations-heading > span { color: #858a80; font-size: 9px; }
+.saved-location-list { display: grid; gap: 8px; }
+.saved-location-card { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 13px 15px; border: 1px solid #e3e3d9; border-radius: 4px; background: #fffefa; }
+.saved-location-mark { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; background: #edf1e9; color: var(--green); font-size: 19px; }
+.saved-location-details { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.saved-location-details strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.saved-location-details > span { color: #858a80; font-size: 9px; }
+.saved-location-open, .saved-location-remove { border: 0; background: transparent; color: var(--green); font: 650 9px var(--sans); cursor: pointer; white-space: nowrap; }
+.saved-location-open span { margin-left: 5px; color: var(--orange); }
+.saved-location-open:hover { color: #294a38; }
+.saved-location-remove { width: 25px; height: 25px; color: #858a80; font-size: 17px; }
+.saved-location-remove:hover { color: #a34f35; }
+.saved-locations-empty { margin: 0; padding: 17px; border: 1px dashed #d8d8ce; border-radius: 4px; color: #858a80; font-size: 10px; line-height: 1.5; }
 .dashboard-demo-note { margin: 14px 0 0; color: #858a80; font-size: 8px; line-height: 1.6; }
 
 @media (max-width: 680px) {
@@ -46,6 +62,8 @@
   .dashboard-stats { grid-template-columns: 1fr 1fr; gap: 9px; }
   .dashboard-stat-card, .dashboard-recent-card { min-height: 145px; padding: 14px; }
   .dashboard-recent-card { grid-column: 1 / -1; }
+  .saved-location-card { gap: 8px; padding: 11px; }
+  .saved-location-open { font-size: 8px; }
   .dashboard-header-actions { gap: 8px; }
   .dashboard-signout { font-size: 9px; }
 }

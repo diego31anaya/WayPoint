@@ -300,7 +300,7 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat }) {
+function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation }) {
   const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
@@ -360,6 +360,14 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
             <span className="heading-divider">·</span>
             Within {search.radiusMiles} miles
           </p>
+          <button
+            className={`save-location-button${locationSaved ? ' is-saved' : ''}`}
+            type="button"
+            onClick={user ? (locationSaved ? onRemoveLocation : onSaveLocation) : onCreateAccount}
+            aria-pressed={user ? locationSaved : undefined}
+          >
+            {user ? (locationSaved ? '✓ Saved to your locations' : '＋ Save this location') : 'Create account to save this location'}
+          </button>
         </div>
         <NeighborhoodMap
           zipCode={search.zipCode}
