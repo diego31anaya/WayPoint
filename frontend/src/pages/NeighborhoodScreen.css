@@ -17,16 +17,26 @@
 .map-location strong { margin-top: 3px; color: var(--ink); font-size: 12px; }
 .radius-badge { display: inline-flex; gap: 7px; align-items: center; border: 1px solid #e4e6dc; border-radius: 3px; padding: 8px 10px; color: #7b8075; font-size: 9px; }
 .radius-badge strong { color: var(--green); font-size: 10px; }
-.empty-neighborhood-map { position: relative; min-height: min(58vh, 520px); display: grid; place-items: center; background-color: #f3f4ed; background-image: linear-gradient(#e5e9df55 1px, transparent 1px), linear-gradient(90deg, #e5e9df55 1px, transparent 1px); background-size: 48px 48px; }
-.empty-map-message { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px; text-align: center; }
-.empty-map-symbol { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 5px; border: 1px solid #d9e0d2; border-radius: 50%; background: #fbfcf8; color: #738a69; font-size: 26px; }
-.empty-map-message strong { color: #455444; font-size: 13px; }
-.empty-map-message > span:last-child { color: #858a80; font-size: 10px; }
-.map-attribution { position: absolute; right: 12px; bottom: 10px; padding: 5px 8px; border: 1px solid #e6e8df; border-radius: 2px; background: #fbfcf8e8; color: #858a80; font-size: 8px; }
+.neighborhood-map-stage { position: relative; height: min(58vh, 520px); min-height: 360px; background: #f3f4ed; }
+.leaflet-map { width: 100%; height: 100%; background: #f3f4ed; }
+.map-status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 24px; text-align: center; color: #858a80; }
+.map-status strong { color: #455444; font-size: 13px; }
+.map-status > span { max-width: 390px; font-size: 10px; line-height: 1.6; }
+.map-status button { margin-top: 5px; border: 1px solid #d8d8ce; border-radius: 3px; padding: 8px 12px; background: #fffefa; color: var(--green); font: 650 10px var(--sans); cursor: pointer; }
+.map-status button:hover { border-color: var(--green); background: #edf1e9; }
+.map-loader { width: 25px; height: 25px; border: 2px solid #dce4d6; border-top-color: var(--green); border-radius: 50%; animation: map-spin .8s linear infinite; }
+.map-data-attribution { position: absolute; left: 10px; bottom: 10px; z-index: 500; padding: 5px 8px; border: 1px solid #e6e8df; border-radius: 2px; background: #fbfcf8e8; color: #72786e; font-size: 8px; pointer-events: none; }
+.map-data-attribution-outside { position: static; display: block; text-align: right; padding: 7px 10px; border: 0; border-top: 1px solid #e9e9e1; border-radius: 0; font-size: 8px; }
 .map-screen-footnote { margin: 13px 0 0; color: #858a80; font-size: 9px; line-height: 1.6; }
+
+@keyframes map-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 680px) {
   .neighborhood-content { padding-block: 40px 52px; }
   .neighborhood-map-toolbar { padding-inline: 14px; }
-  .empty-neighborhood-map { min-height: 55vh; background-size: 36px 36px; }
+  .neighborhood-map-stage { height: 55vh; min-height: 330px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-loader { animation-duration: 2s; }
 }
