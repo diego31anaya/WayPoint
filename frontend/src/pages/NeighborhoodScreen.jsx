@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import AccountControl from '../components/AccountControl'
+import ChatNavButton from '../components/ChatNavButton'
 import { fetchZipBoundary } from '../services/zipBoundary'
 import { CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
@@ -299,7 +300,7 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard }) {
+function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat }) {
   const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
@@ -342,6 +343,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
           <button className="back-home" type="button" onClick={onBack}>
             ← <span>Edit search</span>
           </button>
+          {user && <ChatNavButton onClick={onOpenChat} />}
           <AccountControl
             user={user}
             onCreateAccount={onCreateAccount}

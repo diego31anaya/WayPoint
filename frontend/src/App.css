@@ -4,6 +4,7 @@ main { overflow: hidden; }
 .page-shell { width: min(1160px, calc(100% - 64px)); margin-inline: auto; }
 
 .site-header { height: 86px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.home-header-actions { display: flex; align-items: center; gap: 10px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-size: 21px; font-weight: 750; letter-spacing: -1.1px; }
 .brand-mark { width: 24px; height: 24px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; transform: rotate(-8deg); }
 .brand-mark i { background: var(--green); border-radius: 3px 3px 6px 3px; }

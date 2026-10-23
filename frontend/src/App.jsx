@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import AccountControl from './components/AccountControl'
-import ChatWidget from './components/ChatWidget'
+import ChatNavButton from './components/ChatNavButton'
 import AccountPage from './pages/AccountPage'
+import ChatPage from './pages/ChatPage'
 import DashboardPage from './pages/DashboardPage'
 import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
+import { useAuth } from './context/AuthContext'
 import './App.css'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
@@ -86,7 +88,6 @@ function App() {
   const [activeSearch, setActiveSearch] = useState(null)
   const [currentPage, setCurrentPage] = useState('home')
   const [returnPage, setReturnPage] = useState('home')
-  const [currentUser, setCurrentUser] = useState(null)
   const [brief, setBrief] = useState(null)
 
   useEffect(() => {
@@ -97,6 +98,13 @@ function App() {
       .catch(() => {})  // keep the fallback cards
   }, [])
   const recommendations = brief?.ideas ?? fallbackRecommendations
+  const [chatReturnPage, setChatReturnPage] = useState('home')
+  const { user: currentUser, signIn, signOut } = useAuth()
+
+  function handleOpenChat() {
+    setChatReturnPage(currentPage)
+    setCurrentPage('chat')
+  }
 
   function handleCreateAccount() {
     setReturnPage(currentPage)
@@ -128,17 +136,18 @@ function App() {
 
   if (currentPage === 'account') {
     return (
-      <>
-        <AccountPage
-          onAccountCreated={(user) => {
-            setCurrentUser(user)
-            setCurrentPage('dashboard')
-          }}
-          onBack={() => setCurrentPage(returnPage)}
-        />
-        <ChatWidget />
-      </>
+      <AccountPage
+        onAccountCreated={(user) => {
+          signIn(user)
+          setCurrentPage('dashboard')
+        }}
+        onBack={() => setCurrentPage(returnPage)}
+      />
     )
+  }
+
+  if (currentPage === 'chat' && currentUser) {
+    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
   }
 
   if (currentPage === 'dashboard') {
@@ -149,12 +158,12 @@ function App() {
           activeSearch={activeSearch}
           onExplore={() => setCurrentPage(activeSearch ? 'neighborhood' : 'home')}
           onViewMap={() => setCurrentPage('neighborhood')}
+          onOpenChat={handleOpenChat}
           onSignOut={() => {
-            setCurrentUser(null)
+            signOut()
             setCurrentPage('home')
           }}
         />
-        <ChatWidget />
       </>
     )
   }
@@ -168,8 +177,8 @@ function App() {
           onBack={() => setCurrentPage('home')}
           onCreateAccount={handleCreateAccount}
           onOpenDashboard={() => setCurrentPage('dashboard')}
+          onOpenChat={handleOpenChat}
         />
-        <ChatWidget />
       </>
     )
   }
@@ -186,11 +195,14 @@ function App() {
           <a href="#how-it-works">How it works</a>
           <a href="#insights">What you’ll see</a>
         </nav>
-        <AccountControl
-          user={currentUser}
-          onCreateAccount={handleCreateAccount}
-          onOpenDashboard={() => setCurrentPage('dashboard')}
-        />
+        <div className="home-header-actions">
+          {currentUser && <ChatNavButton onClick={handleOpenChat} />}
+          <AccountControl
+            user={currentUser}
+            onCreateAccount={handleCreateAccount}
+            onOpenDashboard={() => setCurrentPage('dashboard')}
+          />
+        </div>
       </header>
 
       <section className="hero page-shell" id="home">
@@ -295,7 +307,6 @@ function App() {
         <a href="#home" className="back-top">Back to top ↑</a>
       </footer>
       </main>
-      <ChatWidget />
     </>
   )
 }

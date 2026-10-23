@@ -1,7 +1,8 @@
 import AccountControl from '../components/AccountControl'
+import ChatNavButton from '../components/ChatNavButton'
 import './DashboardPage.css'
 
-function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut }) {
+function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut, onOpenChat }) {
   return (
     <main className="dashboard-page">
       <header className="site-header page-shell">
@@ -10,6 +11,7 @@ function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut }) 
           <span>WayPoint</span>
         </a>
         <div className="dashboard-header-actions">
+          {user && <ChatNavButton onClick={onOpenChat} />}
           <AccountControl user={user} />
           <button className="dashboard-signout" type="button" onClick={onSignOut}>Sign out</button>
         </div>
@@ -62,7 +64,7 @@ function DashboardPage({ user, activeSearch, onExplore, onViewMap, onSignOut }) 
           </article>
         </div>
 
-        <p className="dashboard-demo-note">Demo session: account and dashboard data are temporary and will reset when you refresh.</p>
+        <p className="dashboard-demo-note">Demo mode: your signed-in email is remembered in this browser. Neighborhood search data is temporary and resets when you refresh.</p>
       </section>
     </main>
   )
