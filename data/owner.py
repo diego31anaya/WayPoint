@@ -1,7 +1,10 @@
 """Owner-view numbers. Every output is a plain count or ratio a recommendation can quote."""
 import math
 
-from .db import clean, fetch_raw, get_places, haversine_m
+import pandas as pd
+
+from .categories import friendly_category
+from .db import HERE, clean, fetch_raw, get_places, haversine_m
 
 CITY_RADIUS_M = 5_000  # matches the sample extract; raise when querying live
 
@@ -35,3 +38,53 @@ def gap_score(category, lat, lon, radius_m=1000, city_radius_m=CITY_RADIUS_M):
             "city_per_km2": round(city_d, 2),
             "density_ratio": None if ratio is None else round(ratio, 2),
             "gap_score": None if ratio is None else round(min(max(1 - ratio, 0), 1), 2)}
+
+
+# LA County comparisons run in Snowflake with CoCo on 2026-10-23 (354,589 places with
+# an open/closed status). Rates are closed / (open + closed); comparisons, not causes.
+LA_FINDINGS = {
+    "independent_closure_rate": 0.090,
+    "chain_closure_rate": 0.021,
+    "closure_rate_by_competitors_500m": {"0": 0.067, "3-5": 0.085, "6-15": 0.101, "16+": 0.136},
+    "income_effect": "flat: 7.7% (low), 7.7% (middle), 8.8% (high income tercile)",
+}
+MIN_CATEGORY_PLACES = 200  # for "what survives" lists; smaller groups are noisy
+
+
+def _read(name):
+    df = pd.read_csv(HERE / name)
+    df.columns = df.columns.str.lower()
+    return df
+
+
+def survival(category, lat, lon, radius_m=2000):
+    """Open vs. permanently closed counts for a friendly category, locally and across CA.
+
+    Success proxy = survival. Overture only marks some closures, so rates run low.
+    """
+    local = _read("pomona_status.csv")
+    local = local[haversine_m(lat, lon, local.lat, local.lon) <= radius_m]
+    local = local[[friendly_category(t, s, p) == category for t, s, p in
+                   zip(local.top_category, local.sub_category, local.category)]]
+    open_n = int((local.operating_status == "open").sum())
+    closed = local[local.operating_status == "permanently_closed"]
+
+    ca = _read("category_survival.csv")
+    ca = ca[[friendly_category(t, s, p) == category for t, s, p in
+             zip(ca.top_category, ca.sub_category, ca.category)]]
+    rated = ca[(ca.open_n + ca.closed_n >= MIN_CATEGORY_PLACES) & (ca.closed_n > 0)  # 0 = source never marks closures
+               & (ca.category != ca.top_category) & (ca.category != ca.sub_category)  # skip generic labels
+               & (ca.category != category)]
+    rate = lambda o, c: round(c / (o + c), 3) if o + c else None
+    pick = lambda df: df[["category", "closure_rate"]].to_dict("records")
+    return {
+        "category": category, "radius_m": radius_m,
+        "local_open": open_n, "local_closed": len(closed),
+        "local_closure_rate": rate(open_n, len(closed)),
+        "local_closed_examples": closed["name"].head(5).tolist(),
+        "ca_open": int(ca.open_n.sum()), "ca_closed": int(ca.closed_n.sum()),
+        "ca_closure_rate": rate(ca.open_n.sum(), ca.closed_n.sum()),
+        "ca_most_durable": pick(rated.nsmallest(3, "closure_rate")),
+        "ca_least_durable": pick(rated.nlargest(3, "closure_rate")),
+        "la_county": LA_FINDINGS,
+    }
