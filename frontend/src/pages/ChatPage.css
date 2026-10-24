@@ -71,7 +71,12 @@
   .chat-suggestion-list { display: grid; }
   .chat-suggestion-list button { text-align: left; }
 }
-.chat-typing { color: #8a968e; font-style: italic; }
+.chat-typing { display: flex; align-items: center; gap: 5px; min-height: 32px; color: #8a968e; font-size: 12px; }
+.chat-typing span { margin-right: 2px; }
+.chat-typing i { width: 5px; height: 5px; border-radius: 50%; background: #8a968e; animation: chat-typing-pulse 1.15s infinite ease-in-out; }
+.chat-typing i:nth-of-type(2) { animation-delay: .15s; }
+.chat-typing i:nth-of-type(3) { animation-delay: .3s; }
+@keyframes chat-typing-pulse { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 
 /* Markdown stays inside the existing message layout; HTML is never enabled. */
 .chat-message-content { min-width: 0; max-width: 100%; }

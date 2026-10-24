@@ -50,8 +50,7 @@ function ChatPage({ user, onBack, integration, search }) {
   const context = analysis?.agent_context
   const contextKey = context ? `${context.business_id}:${context.location_id}` : null
   const contextLoading = integration.selected?.status === 'loading' || integration.status === 'loading'
-  const contextNote = contextLoading ? 'Location analysis is loading. General business chat is available; selected-location metrics are not attached yet.'
-    : !context ? 'General business chat is available. No verified selected-location metrics are attached; simulated dashboard values are never sent as facts.' : null
+  const contextNote = contextLoading ? 'Location analysis is loading. General business chat is available; selected-location metrics are not attached yet.' : null
 
   async function submit(text, retry = false) {
     if (!text || pendingChatId) return
@@ -128,6 +127,12 @@ function ChatPage({ user, onBack, integration, search }) {
                   ) : <p>{item.content}</p>}{(item.location || item.queryIds?.length > 0) && <small>{item.location && <>Location: {item.location} ? </>}{item.queryIds?.length > 0 && <>Snowflake queries: {item.queryIds.join(', ')}</>}</small>}</div>
                 </article>
               ))}
+              {pendingChatId === activeChatId && (
+                <article className="chat-message assistant" role="status" aria-label="WayPoint is generating a response">
+                  <span className="chat-message-avatar" aria-hidden="true">W</span>
+                  <div className="chat-typing"><span>WayPoint is thinking</span><i /><i /><i /></div>
+                </article>
+              )}
             </div>
           ) : (
             <div className="chat-empty-state">
@@ -144,7 +149,6 @@ function ChatPage({ user, onBack, integration, search }) {
         <div className="chat-compose-wrap">
           {contextNote && <p role="status">{contextNote}</p>}
           {context && <p>Current location: {integration.selected?.feature.properties.h3_cell ?? integration.locationLabel ?? search?.zipCode} · {search?.businessType}</p>}
-          {pendingChatId && pendingChatId === activeChatId && <p role="status">Cortex Agent is checking Snowflake metrics?</p>}
           {activeChat?.error && <p role="alert">{activeChat.error} <button disabled={!!pendingChatId} onClick={() => submit(activeChat.retryText, true)}>Retry</button></p>}
           <form className="chat-compose" onSubmit={sendMessage}>
             <textarea maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
