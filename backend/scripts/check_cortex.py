@@ -18,13 +18,19 @@ def main():
     args = parser.parse_args()
     settings = Settings(ai_enabled=True)
     if args.component == 'agent':
-        if not args.business_id or not args.location_id or not settings.snowflake_agent_token:
-            print('Agent check BLOCKED: supply real stored context IDs, server token, saved agent and semantic view.')
+        if not settings.snowflake_account or not (settings.snowflake_pat or settings.snowflake_agent_token):
+            print('Agent check BLOCKED: configure SNOWFLAKE_ACCOUNT and SNOWFLAKE_PAT server-side.')
             return 2
         try:
-            response = CortexAgentService(settings).chat(AgentChatRequest(message='Explain mapped competition and the opportunity score.',
-                business_id=args.business_id, location_id=args.location_id))
-            print(json.dumps({'component': 'agent', 'verified': True, 'analyst_query_ids': response.analyst_query_ids}))
+            request = AgentChatRequest(message='Which business category has the highest reported closure rate? Briefly explain the data limitation.',
+                business_id=args.business_id, location_id=args.location_id)
+            service = CortexAgentService(settings)
+            response = service.chat(request)
+            followup = service.chat(AgentChatRequest(message='For that same category, why is the reported rate not a survival forecast?',
+                business_id=args.business_id, location_id=args.location_id, conversation_id=response.conversation_id))
+            print(json.dumps({'component': 'agent', 'verified': True, 'agent': response.metadata['agent'],
+                'conversation_id': response.conversation_id, 'followup_same_conversation': followup.conversation_id == response.conversation_id,
+                'analyst_query_ids': response.analyst_query_ids, 'location_context': response.metadata['location_context']}))
             return 0
         except AgentUnavailable as exc:
             print('Agent check FAILED: '+str(exc))

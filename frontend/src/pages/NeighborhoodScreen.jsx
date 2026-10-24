@@ -9,6 +9,7 @@ import { fetchHeat, HEAT_GRADIENT, scoreColor } from '../services/heatmap'
 import { distanceInMiles, fetchZipBoundary } from '../services/zipBoundary'
 import { CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
+import AnalysisResults from '../components/AnalysisResults'
 
 const MILE_M = 1609.34
 const percent = (rate) => `${(rate * 100).toFixed(1)}%`
@@ -108,7 +109,7 @@ function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selected
   useEffect(() => {
     if (!mapElement.current) return undefined
 
-    const map = L.map(mapElement.current, { scrollWheelZoom: false })
+    const map = L.map(mapElement.current, { scrollWheelZoom: false, zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false })
     const tileUrl = import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     L.tileLayer(tileUrl, {
       maxZoom: 19,
@@ -154,10 +155,10 @@ function ZipCodeMap({ zipCode, geoJson, zipData, category, radiusMiles, selected
         className: 'selected-map-ping',
       }).bindPopup(placePopup(selectedPlace)).addTo(map).bringToFront()
       // A heatmap spot is a ~0.74 km² hexagon: show it with its neighbors, not street level.
-      map.setView(selectedCoordinates, selectedPlace.isSpot ? 14 : Math.max(map.getZoom(), 16), { animate: true })
+      map.setView(selectedCoordinates, selectedPlace.isSpot ? 14 : Math.max(map.getZoom(), 16), { animate: false })
     }
 
-    return () => map.remove()
+    return () => { map.stop(); map.remove() }
   }, [geoJson, zipData, category, radiusMiles, selectedPlace, heat])
 
   return <div className="leaflet-map" ref={mapElement} role="region" aria-label={`Map of ZIP code ${zipCode}`} />
@@ -591,7 +592,7 @@ function StrategiesSection({ search, category, zipData }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, initialSelectedPlace }) {
+function NeighborhoodScreen({ backendView, onToggleBackendView, integration, onSelectLocation, search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, initialSelectedPlace }) {
   const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
@@ -630,6 +631,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
 
   function selectPlace(place) {
     setSelectedPlace(place)
+    onSelectLocation?.(place)
     if (place?.isSpot) setHeatOn(true)
   }
 
@@ -675,6 +677,8 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
             {dataRadius(search.radiusMiles) !== search.radiusMiles && ` · Numbers use the nearest radius we have (${dataRadius(search.radiusMiles)} mi)`}
           </p>
         </div>
+        <button className="back-home" type="button" aria-pressed={backendView} onClick={onToggleBackendView}>{backendView ? 'Neighborhood finder' : 'Backend analysis'}</button>
+        {backendView ? <AnalysisResults integration={integration} /> : <>
         <SearchMetrics search={search} category={category} zipResult={zipResult} />
         <div className="finder-layout">
           <PlaceResultsPanel
@@ -705,6 +709,7 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
         </p>
         <NeighborhoodInsights search={search} category={category} zipResult={zipResult} index={index} />
         <StrategiesSection search={search} category={category} zipData={zipResult.data} />
+        </>}
       </section>
     </main>
   )

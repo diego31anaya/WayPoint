@@ -199,7 +199,9 @@ class CortexAIService:
             return LocationExplanation(summary='Review mapped competition and complementary categories before testing a location hypothesis.',
                 factors=['Competition density and complementary presence drive the documented heuristic.',
                          'Category gaps are hypotheses and do not prove unmet demand.'],
-                supporting_evidence=evidence, source='deterministic_fallback', model=None, limitations=limits)
+                supporting_evidence=([e for e in evidence if not e.metric_id.startswith('category_count:')]
+                    + [e for e in evidence if e.metric_id.startswith('category_count:')])[:20],
+                source='deterministic_fallback', model=None, limitations=limits)
 
     def generate_location_summary(self, business_info, location_metrics):
         from app.services.analytics_service import get_neighborhood_insights

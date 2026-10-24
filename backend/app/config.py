@@ -18,14 +18,16 @@ class Settings(BaseSettings):
     cortex_allow_legacy: bool = False
     cortex_allow_cross_region: bool = False
     cortex_open_weight_models: list[str] = ['llama3.3-70b']
-    snowflake_agent_database: str = 'BLOCKBOOST'
+    snowflake_agent_database: str = 'WAYPOINT'
     snowflake_agent_schema: str = 'PUBLIC'
     snowflake_agent_name: str = 'BUSINESS_ADVISOR'
-    snowflake_agent_tool_name: str = 'neighborhood_analyst'
-    snowflake_semantic_view: str = 'BLOCKBOOST.PUBLIC.NEIGHBORHOOD_SEMANTIC'
+    snowflake_agent_tool_name: str = 'BUSINESS_ANALYTICS'
+    snowflake_semantic_view: str = 'WAYPOINT.PUBLIC.BUSINESS_ANALYTICS'
     snowflake_context_view: str = 'NEIGHBORHOOD_CONTEXT'
     snowflake_agent_setup_verified: bool = False
     snowflake_account_base_url: str = ''
+    snowflake_pat: str = Field(default='', repr=False)
+    snowflake_agent_timeout_s: int = Field(default=180, ge=10, le=600)
     snowflake_agent_token: str = Field(default='', repr=False)
     snowflake_agent_token_type: Literal['PROGRAMMATIC_ACCESS_TOKEN', 'OAUTH', 'KEYPAIR_JWT'] = 'PROGRAMMATIC_ACCESS_TOKEN'
     cors_origins: list[str] = ['http://localhost:5173', 'http://127.0.0.1:5173']

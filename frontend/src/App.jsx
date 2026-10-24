@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AccountControl from './components/AccountControl'
 import ChatNavButton from './components/ChatNavButton'
 import AboutDataPage from './pages/AboutDataPage'
@@ -9,6 +9,7 @@ import NeighborhoodScreen from './pages/NeighborhoodScreen'
 import { buildBrief, fetchDataIndex, fetchZipData, matchCategory } from './services/zipData'
 import { useAuth } from './context/useAuth'
 import './App.css'
+import { useAnalysis } from './services/useAnalysis'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
 const FEATURED_ZIP = '91768'
@@ -92,6 +93,11 @@ function App() {
   const [message, setMessage] = useState('')
   const [activeSearch, setActiveSearch] = useState(() => (window.location.hash === '#demo' ? DEMO_SEARCH : null))
   const [activeSavedPlace, setActiveSavedPlace] = useState(null)
+  const [backendView, setBackendView] = useState(false)
+  const [finderSelection, setFinderSelection] = useState(null)
+  const selectedFinderPlace = finderSelection?.search === activeSearch ? finderSelection.place : activeSavedPlace
+  const analysisSearch = useMemo(() => selectedFinderPlace && activeSearch ? { ...activeSearch, selectedPlace: selectedFinderPlace } : activeSearch, [activeSearch, selectedFinderPlace])
+  const integration = useAnalysis(analysisSearch)
   // #about-the-data opens the data story and #demo the rehearsed search, for demos and slides.
   const [currentPage, setCurrentPage] = useState(() => ({ '#about-the-data': 'about', '#demo': 'neighborhood' }[window.location.hash] ?? 'home'))
   const [returnPage, setReturnPage] = useState('home')
@@ -159,6 +165,7 @@ function App() {
       radiusMiles: Number(radius),
     })
     setActiveSavedPlace(null)
+    setFinderSelection(null)
     setCurrentPage('neighborhood')
   }
 
@@ -174,10 +181,12 @@ function App() {
     setRadius(String(DEMO_SEARCH.radiusMiles))
     setActiveSearch(DEMO_SEARCH)
     setActiveSavedPlace(null)
+    setFinderSelection(null)
     setCurrentPage('neighborhood')
     window.scrollTo(0, 0)
   }
 
+  function renderPage() {
   if (currentPage === 'about') {
     return (
       <AboutDataPage
@@ -205,23 +214,24 @@ function App() {
     )
   }
 
-  if (currentPage === 'chat' && currentUser) {
-    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
-  }
+  if (currentPage === 'chat' && currentUser) return null
 
   if (currentPage === 'dashboard') {
     return (
       <>
         <DashboardPage
+          integration={integration}
           user={currentUser}
           activeSearch={activeSearch}
           savedLocations={savedLocations}
           onExplore={() => {
             setActiveSavedPlace(null)
+            setFinderSelection(null)
             setCurrentPage(activeSearch ? 'neighborhood' : 'home')
           }}
           onViewMap={() => {
             setActiveSavedPlace(null)
+            setFinderSelection(null)
             setCurrentPage('neighborhood')
           }}
           onOpenSavedLocation={handleOpenSavedLocation}
@@ -240,13 +250,17 @@ function App() {
     return (
       <>
         <NeighborhoodScreen
+          backendView={backendView}
+          onToggleBackendView={() => setBackendView((value) => !value)}
+          integration={integration}
+          onSelectLocation={(place) => setFinderSelection({ search: activeSearch, place })}
           search={activeSearch}
           user={currentUser}
           onBack={() => setCurrentPage('home')}
           onCreateAccount={handleCreateAccount}
           onOpenDashboard={() => setCurrentPage('dashboard')}
           onOpenChat={handleOpenChat}
-          initialSelectedPlace={activeSavedPlace}
+          initialSelectedPlace={selectedFinderPlace}
         />
       </>
     )
@@ -380,6 +394,9 @@ function App() {
       </main>
     </>
   )
+  }
+  return <>{renderPage()}{currentUser && <div hidden={currentPage !== 'chat'}><ChatPage key={currentUser.email} integration={integration} search={activeSearch} user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} /></div>}</>
+
 }
 
 export default App

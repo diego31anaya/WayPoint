@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.config import get_settings
-from app.dependencies import get_data_service, get_ai_service
+from app.dependencies import get_data_service, get_ai_service, get_agent_service
 from app.schemas import AnalysisRequest, AnalysisResponse, Metadata, CATEGORIES, COMPLEMENTS, BUSINESS_GOALS
 from app.services.analytics_service import get_neighborhood_insights, neighborhood_summary
 from app.services.scoring_service import score_opportunities
@@ -18,7 +18,7 @@ def categories():
 
 
 @router.post('/analyze', response_model=AnalysisResponse)
-def analyze(request: AnalysisRequest, data=Depends(get_data_service), ai=Depends(get_ai_service), settings=Depends(get_settings)):
+def analyze(request: AnalysisRequest, data=Depends(get_data_service), ai=Depends(get_ai_service), settings=Depends(get_settings), agent=Depends(get_agent_service)):
     data_source = {'live': 'snowflake'}.get(settings.data_mode, settings.data_mode)
     data_warnings = []
     try:
@@ -40,7 +40,13 @@ def analyze(request: AnalysisRequest, data=Depends(get_data_service), ai=Depends
     warnings += data_warnings + ['Place coverage and category completeness are unknown. Ownership is unknown. Scores are unvalidated heuristics.']
     if settings.data_mode == 'mock':
         warnings.append('SIMULATED: fixed synthetic Pomona records; not actual Overture observations.')
-    return AnalysisResponse(business_type=request.business_type, location=request.location, radius_m=request.radius_m,
+    agent_context = None
+    if data_source in {'local', 'snowflake'}:
+        try:
+            agent_context = agent.register_context(request, metrics, places, data_source=data_source)
+        except Exception:
+            warnings.append('Verified chat location context unavailable; check the mapping and dataset release. General business chat remains available.')
+    return AnalysisResponse(agent_context=agent_context, business_type=request.business_type, location=request.location, radius_m=request.radius_m,
         business_information=request, neighborhood_insights=summary,
         location_summary=ai.generate_location_summary(request, metrics) if request.include_location_summary else None,
         score_explanation=ai.explain_opportunity_score(metrics) if request.include_score_explanation else None,

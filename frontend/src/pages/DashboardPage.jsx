@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import './DashboardPage.css'
+import AnalysisResults from '../components/AnalysisResults'
 
-function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
+function DashboardPage({ integration, user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
   const [toast, setToast] = useState('')
 
   useEffect(() => {
@@ -78,6 +79,7 @@ function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMa
           </article>
         </div>
 
+        <AnalysisResults integration={integration} compact />
         <section className="saved-locations" aria-labelledby="saved-locations-heading">
           <div className="saved-locations-heading">
             <div>

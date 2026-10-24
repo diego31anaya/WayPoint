@@ -1,3 +1,6 @@
+-- LEGACY OPTIONAL context-table template, not required by the SDK chatbot.
+-- The existing verified agent/view are WAYPOINT.PUBLIC.BUSINESS_ADVISOR and
+-- WAYPOINT.PUBLIC.BUSINESS_ANALYTICS. Do not replace them with this example.
 -- Administrator/data lead worksheet. Review every statement before running.
 -- No account setup or grants are executed by the API.
 SHOW CORTEX BASE MODELS IN SCHEMA SNOWFLAKE.MODELS;
@@ -20,7 +23,7 @@ CREATE TABLE IF NOT EXISTS BLOCKBOOST.PUBLIC.NEIGHBORHOOD_CONTEXT (
 );
 -- Standard-table keys are informational: verify uniqueness and use a single
 -- publisher. The API rejects ambiguous context, rather than choosing a row.
--- Populate only from real connector analytics via scripts.publish_agent_context.
+-- Optional pre-publication uses scripts.publish_agent_context; /api/analyze now keeps verified runtime snapshots.
 
 CREATE OR REPLACE VIEW BLOCKBOOST.PUBLIC.NEIGHBORHOOD_ANALYTICS AS
 SELECT BUSINESS_ID, LOCATION_ID,
@@ -71,5 +74,6 @@ AI_SQL_GENERATION 'Always filter by requested BUSINESS_ID and LOCATION_ID. Group
 -- Do not grant account admin to the API. Runtime needs read privileges on
 -- verified places, curated analytics/context and semantic views, appropriate
 -- Cortex/Analyst access and USAGE on the saved agent, plus token/network policy.
+-- Only the optional standalone publisher requires INSERT/UPDATE on NEIGHBORHOOD_CONTEXT.
 -- Agent spec must be readable for runtime verification. A secure/redacted
 -- specification will fail closed; configure access deliberately with the owner.

@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, StringConstraints, Field, field_validator, model_validator
 from app.data.category_groups import CAFE, RESTAURANT
 
 Text = Annotated[str, Field(min_length=1, max_length=300, pattern=r'\S')]
@@ -141,7 +141,13 @@ class Metadata(StrictModel):
     category_mapping_status: str = 'candidate mappings; confirm against listing'
 
 
+class AgentContextReference(StrictModel):
+    business_id: str
+    location_id: str
+
+
 class AnalysisResponse(StrictModel):
+    agent_context: AgentContextReference | None = None
     business_type: str
     location: Location
     radius_m: int
@@ -191,20 +197,34 @@ class LocationExplanation(ExplanationContent):
 class StoredLocationContext(StrictModel):
     business_information: AnalysisRequest
     metrics: Metrics
-    data_source: Literal['snowflake']
+    data_source: Literal['local', 'snowflake']
     dataset_release: str
 
 
 class AgentChatRequest(StrictModel):
     message: str = Field(min_length=1, max_length=3000)
-    business_id: Text
-    location_id: Text
+    business_id: Text | None = None
+    location_id: Text | None = None
+    business_information: AnalysisRequest | None = None
+    selected_zone: 'SelectedZoneContext | None' = None
     comparison_location_ids: list[Text] = Field(default_factory=list, max_length=4)
-    conversation_id: str | None = Field(default=None, min_length=20, max_length=100)
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=100, pattern=r'^[0-9]+$')
+
+    @model_validator(mode='after')
+    def validate_context(self):
+        if bool(self.business_id) != bool(self.location_id):
+            raise ValueError('business_id and location_id must be supplied together')
+        if self.comparison_location_ids and not self.business_id:
+            raise ValueError('Location comparisons require verified business/location IDs')
+        if self.business_information and self.business_id:
+            raise ValueError('Supply either context IDs or business_information, not both')
+        if self.selected_zone and not (self.business_id or self.business_information):
+            raise ValueError('A selected zone requires verified location analysis context')
+        return self
 
 
 class AgentChatResponse(StrictModel):
-    response: str
+    response: Annotated[str, StringConstraints(strip_whitespace=False)]
     conversation_id: str
     supporting_metrics: dict[str, list[Evidence]]
     relevant_location_ids: list[str]
@@ -217,6 +237,11 @@ class OpportunityMapRequest(StrictModel):
     location: Location
     resolution: Literal[7, 8, 9] = 8
     grid_disk_k: int = Field(default=2, ge=0, le=4)
+
+
+class SelectedZoneContext(StrictModel):
+    h3_cell: Text
+    map_request: OpportunityMapRequest
 
 
 class ZoneGeometry(StrictModel):

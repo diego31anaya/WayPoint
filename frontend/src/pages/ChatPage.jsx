@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { sendChat } from '../services/api'
-import { buildBrief, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './ChatPage.css'
+import { apiRequest } from '../services/api'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 const STORAGE_KEY = 'waypoint-chat-history-v1'
 
@@ -10,6 +12,7 @@ function loadChats(storageKey) {
     const stored = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
     return Array.isArray(stored)
       ? stored.filter((chat) => chat && typeof chat.id === 'string' && Array.isArray(chat.messages))
+        .map((chat) => ({ ...chat, conversationId: /^[0-9]+$/.test(String(chat.conversationId ?? '')) ? String(chat.conversationId) : null }))
       : []
   } catch {
     return []
@@ -20,27 +23,12 @@ function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-// Plain-text facts about the user's last search, sent with each message so answers stay grounded.
-async function describeSearch(search) {
-  const header = `Business type: ${search.businessType}. ZIP code: ${search.zipCode}. Search radius: ${search.radiusMiles} mi.`
-  const [zipData, index] = await Promise.all([fetchZipData(search.zipCode), fetchDataIndex().catch(() => null)])
-  if (!zipData) return `${header}\nThis ZIP code is outside WayPoint's Los Angeles-area data.`
-  const ideas = buildBrief(zipData, index, matchCategory(search.businessType), dataRadius(search.radiusMiles))
-  return [header, ...ideas.map((idea) => `- ${idea.title}: ${idea.description}`)].join('\n')
-}
-
-function ChatPage({ user, search, onBack }) {
+function ChatPage({ user, onBack, integration, search }) {
   const storageKey = `${STORAGE_KEY}:${user?.email?.toLowerCase() ?? 'demo'}`
   const [chats, setChats] = useState(() => loadChats(storageKey))
   const [activeChatId, setActiveChatId] = useState(() => loadChats(storageKey)[0]?.id ?? null)
   const [draft, setDraft] = useState('')
-  const [pending, setPending] = useState(false)
-  const [context, setContext] = useState('')
-
-  useEffect(() => {
-    if (!search) return
-    describeSearch(search).then(setContext).catch(() => setContext(''))
-  }, [search])
+  const [pendingChatId, setPendingChatId] = useState(null)
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) ?? null, [chats, activeChatId])
 
   useEffect(() => {
@@ -58,42 +46,49 @@ function ChatPage({ user, search, onBack }) {
     setDraft('')
   }
 
-  function appendMessage(chatId, message, title) {
-    setChats((current) => {
-      const existing = current.find((chat) => chat.id === chatId)
-      if (!existing) {
-        return [{ id: chatId, title: title.slice(0, 48), createdAt: message.createdAt, messages: [message] }, ...current]
-      }
-      return [
-        { ...existing, title: existing.messages.length ? existing.title : title.slice(0, 48), messages: [...existing.messages, message] },
-        ...current.filter((chat) => chat.id !== chatId),
-      ]
-    })
-  }
+  const analysis = integration.activeAnalysis
+  const context = analysis?.agent_context
+  const contextKey = context ? `${context.business_id}:${context.location_id}` : null
+  const contextLoading = integration.selected?.status === 'loading' || integration.status === 'loading'
+  const contextNote = contextLoading ? 'Location analysis is loading. General business chat is available; selected-location metrics are not attached yet.'
+    : !context ? 'General business chat is available. No verified selected-location metrics are attached; simulated dashboard values are never sent as facts.' : null
 
-  async function sendMessage(event) {
-    event.preventDefault()
-    const text = draft.trim()
-    if (!text || pending) return
-
+  async function submit(text, retry = false) {
+    if (!text || pendingChatId) return
     const chatId = activeChatId ?? createId()
-    const userMessage = { id: createId(), role: 'user', content: text, createdAt: new Date().toISOString() }
-    const history = [...(chats.find((chat) => chat.id === chatId)?.messages ?? []), userMessage]
-      .slice(-20)
-      .map(({ role, content }) => ({ role, content: content.slice(0, 4000) }))
-    appendMessage(chatId, userMessage, text)
+    const existing = chats.find((chat) => chat.id === chatId)
+    const now = new Date().toISOString()
+    const userMessage = { id: createId(), role: 'user', content: text, createdAt: now }
+    const priorMessages = existing?.messages ?? []
+    const messages = retry ? priorMessages : [...priorMessages, userMessage]
+    const locationLabel = integration.selected?.feature.properties.h3_cell ?? integration.locationLabel ?? search?.zipCode
+    setChats((current) => [{ ...existing, id: chatId, title: existing?.messages.length ? existing.title : text.slice(0, 48), createdAt: existing?.createdAt ?? now, messages, error: null, retryText: null }, ...current.filter((chat) => chat.id !== chatId)])
     setActiveChatId(chatId)
     setDraft('')
-    setPending(true)
-
-    let content
+    setPendingChatId(chatId)
     try {
-      content = (await sendChat(history, context)).reply
-    } catch {
-      content = 'I couldn’t reach the WayPoint backend. Start it with the command in the README, then try again.'
-    }
-    appendMessage(chatId, { id: createId(), role: 'assistant', content, createdAt: new Date().toISOString() }, text)
-    setPending(false)
+      const selectedZone = context && integration.selected && integration.request ? {
+        h3_cell: integration.selected.feature.properties.h3_cell,
+        map_request: { business_type: integration.request.business_type, location: integration.request.location },
+      } : null
+      const response = await apiRequest('/agent/chat', { ...(context ?? {}), message: text,
+        ...(selectedZone ? { selected_zone: selectedZone } : {}),
+        ...(existing?.conversationId ? { conversation_id: existing.conversationId } : {}) })
+      setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat,
+        conversationId: response.conversation_id, contextKey,
+        messages: [...chat.messages, { id: createId(), role: 'assistant', content: response.response, createdAt: new Date().toISOString(), location: context ? locationLabel : null, queryIds: response.analyst_query_ids }],
+      } : chat))
+    } catch (error) {
+      setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat, error: error.message, retryText: text,
+        // Expired conversations require an explicit new thread; transport failures retain history.
+        conversationId: error.status === 409 ? null : existing?.conversationId, contextKey: null,
+      } : chat))
+    } finally { setPendingChatId(null) }
+  }
+
+  function sendMessage(event) {
+    event.preventDefault()
+    if (draft.trim().length <= 3000) submit(draft.trim())
   }
 
   return (
@@ -128,12 +123,11 @@ function ChatPage({ user, search, onBack }) {
               {activeChat.messages.map((item) => (
                 <article className={`chat-message ${item.role}`} key={item.id}>
                   <span className="chat-message-avatar">{item.role === 'user' ? (user?.email?.[0]?.toUpperCase() ?? 'Y') : 'W'}</span>
-                  <p>{item.content}</p>
+                  <div className="chat-message-content">{item.role === 'assistant' ? (
+                    <div className="chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} skipHtml>{item.content}</ReactMarkdown></div>
+                  ) : <p>{item.content}</p>}{(item.location || item.queryIds?.length > 0) && <small>{item.location && <>Location: {item.location} ? </>}{item.queryIds?.length > 0 && <>Snowflake queries: {item.queryIds.join(', ')}</>}</small>}</div>
                 </article>
               ))}
-              {pending && activeChat?.id === activeChatId && (
-                <article className="chat-message assistant"><span className="chat-message-avatar">W</span><p className="chat-typing">Thinking…</p></article>
-              )}
             </div>
           ) : (
             <div className="chat-empty-state">
@@ -148,11 +142,15 @@ function ChatPage({ user, search, onBack }) {
           )}
         </div>
         <div className="chat-compose-wrap">
+          {contextNote && <p role="status">{contextNote}</p>}
+          {context && <p>Current location: {integration.selected?.feature.properties.h3_cell ?? integration.locationLabel ?? search?.zipCode} ? {search?.businessType}</p>}
+          {pendingChatId && pendingChatId === activeChatId && <p role="status">Cortex Agent is checking Snowflake metrics?</p>}
+          {activeChat?.error && <p role="alert">{activeChat.error} <button disabled={!!pendingChatId} onClick={() => submit(activeChat.retryText, true)}>Retry</button></p>}
           <form className="chat-compose" onSubmit={sendMessage}>
-            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
-            <button type="submit" disabled={!draft.trim() || pending} aria-label="Send message">↑</button>
+            <textarea maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
+            <button type="submit" disabled={!draft.trim() || !!pendingChatId} aria-label="Send message">↑</button>
           </form>
-          <p className="chat-compose-note">Chats are saved in this browser.{search ? ` Answers use your search: ${search.businessType} in ${search.zipCode}.` : ' Explore a ZIP code first for answers about your neighborhood.'}</p>
+          <p className="chat-compose-note">Chats are saved in this browser. Responses use the saved Snowflake Cortex Agent. Location metrics are attached only when verified.</p>
         </div>
       </section>
     </main>
