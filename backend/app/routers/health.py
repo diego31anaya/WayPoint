@@ -13,6 +13,6 @@ def health(check_dependencies: bool = False, settings=Depends(get_settings),
             'ollama': 'removed',
             'cortex': ai.check_availability() if check_dependencies else ('enabled_not_probed' if settings.ai_enabled else 'disabled'),
             'ai_provider': settings.ai_provider,
-            'agent': 'configured_not_probed' if settings.snowflake_agent_setup_verified else 'setup_required',
+            'agent': 'configured_not_probed' if settings.snowflake_account and (settings.snowflake_pat or settings.snowflake_agent_token) else 'setup_required',
             'dependencies_checked': check_dependencies,
             'model': settings.snowflake_cortex_model}

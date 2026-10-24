@@ -71,3 +71,28 @@
   .chat-suggestion-list { display: grid; }
   .chat-suggestion-list button { text-align: left; }
 }
+
+/* Markdown stays inside the existing message layout; HTML is never enabled. */
+.chat-message-content { min-width: 0; max-width: 100%; }
+.chat-markdown { color: #39483d; font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; }
+.chat-markdown > :first-child { margin-top: 2px; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown p { margin: 0 0 .85em; white-space: normal; }
+.chat-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 1.2em 0 .45em; color: #294331; font-family: inherit; font-weight: 600; line-height: 1.35; }
+.chat-markdown h1 { font-size: 1.45em; }
+.chat-markdown h2 { font-size: 1.3em; }
+.chat-markdown h3 { font-size: 1.15em; }
+.chat-markdown :is(h4, h5, h6) { font-size: 1em; }
+.chat-markdown :is(ul, ol) { margin: .4em 0 .85em; padding-left: 1.6em; }
+.chat-markdown li { margin: .25em 0; }
+.chat-markdown li > :is(ul, ol) { margin-bottom: .3em; }
+.chat-markdown li > p { margin-bottom: .4em; }
+.chat-markdown a { color: #365b43; text-decoration: underline; text-underline-offset: 2px; }
+.chat-markdown code { padding: .1em .3em; border-radius: 4px; background: #f0f3ed; font-family: Consolas, monospace; font-size: .9em; }
+.chat-markdown pre { max-width: 100%; margin: .85em 0; padding: 12px 14px; overflow-x: auto; border: 1px solid #e1e7df; border-radius: 8px; background: #f7f8f5; white-space: pre; }
+.chat-markdown pre code { padding: 0; background: transparent; overflow-wrap: normal; }
+.chat-markdown table { display: block; max-width: 100%; margin: .85em 0; overflow-x: auto; border-collapse: collapse; font-size: .95em; }
+.chat-markdown :is(th, td) { padding: 7px 10px; border: 1px solid #dfe5dd; text-align: left; }
+.chat-markdown th { background: #f0f3ed; font-weight: 600; }
+.chat-markdown blockquote { margin: .85em 0; padding-left: 14px; border-left: 3px solid #9bb19a; color: #5e665c; }
+.chat-markdown hr { margin: 1em 0; border: 0; border-top: 1px solid #dfe5dd; }

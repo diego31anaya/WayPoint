@@ -1,8 +1,9 @@
 import AccountControl from '../components/AccountControl'
 import ChatNavButton from '../components/ChatNavButton'
 import './DashboardPage.css'
+import AnalysisResults from '../components/AnalysisResults'
 
-function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
+function DashboardPage({ integration, user, activeSearch, savedLocations, onExplore, onViewMap, onOpenSavedLocation, onRemoveSavedLocation, onSignOut, onOpenChat }) {
   return (
     <main className="dashboard-page">
       <header className="site-header page-shell">
@@ -38,7 +39,7 @@ function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMa
           <article className="dashboard-stat-card">
             <span className="stat-icon">⌖</span>
             <span className="stat-label">NEIGHBORHOOD REPORTS</span>
-            <strong>{activeSearch ? '1' : '0'}</strong>
+            <strong>{integration.activeAnalysis ? '1' : '0'}</strong>
             <span className="stat-description">{activeSearch ? 'Current search' : 'No reports yet'}</span>
           </article>
           <article className="dashboard-stat-card">
@@ -64,6 +65,7 @@ function DashboardPage({ user, activeSearch, savedLocations, onExplore, onViewMa
           </article>
         </div>
 
+        <AnalysisResults integration={integration} compact />
         <section className="saved-locations" aria-labelledby="saved-locations-heading">
           <div className="saved-locations-heading">
             <div>

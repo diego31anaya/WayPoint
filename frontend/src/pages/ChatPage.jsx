@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import './ChatPage.css'
+import { apiRequest } from '../services/api'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 const STORAGE_KEY = 'waypoint-chat-history-v1'
 
@@ -8,6 +12,7 @@ function loadChats(storageKey) {
     const stored = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
     return Array.isArray(stored)
       ? stored.filter((chat) => chat && typeof chat.id === 'string' && Array.isArray(chat.messages))
+        .map((chat) => ({ ...chat, conversationId: /^[0-9]+$/.test(String(chat.conversationId ?? '')) ? String(chat.conversationId) : null }))
       : []
   } catch {
     return []
@@ -18,11 +23,12 @@ function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-function ChatPage({ user, onBack }) {
+function ChatPage({ user, onBack, integration, search }) {
   const storageKey = `${STORAGE_KEY}:${user?.email?.toLowerCase() ?? 'demo'}`
   const [chats, setChats] = useState(() => loadChats(storageKey))
   const [activeChatId, setActiveChatId] = useState(() => loadChats(storageKey)[0]?.id ?? null)
   const [draft, setDraft] = useState('')
+  const [pendingChatId, setPendingChatId] = useState(null)
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) ?? null, [chats, activeChatId])
 
   useEffect(() => {
@@ -40,27 +46,49 @@ function ChatPage({ user, onBack }) {
     setDraft('')
   }
 
-  function sendMessage(event) {
-    event.preventDefault()
-    const text = draft.trim()
-    if (!text) return
+  const analysis = integration.activeAnalysis
+  const context = analysis?.agent_context
+  const contextKey = context ? `${context.business_id}:${context.location_id}` : null
+  const contextLoading = integration.selected?.status === 'loading' || integration.status === 'loading'
+  const contextNote = contextLoading ? 'Location analysis is loading. General business chat is available; selected-location metrics are not attached yet.'
+    : !context ? 'General business chat is available. No verified selected-location metrics are attached; simulated dashboard values are never sent as facts.' : null
 
+  async function submit(text, retry = false) {
+    if (!text || pendingChatId) return
     const chatId = activeChatId ?? createId()
+    const existing = chats.find((chat) => chat.id === chatId)
     const now = new Date().toISOString()
     const userMessage = { id: createId(), role: 'user', content: text, createdAt: now }
-    const assistantMessage = { id: createId(), role: 'assistant', content: 'Message recieved', createdAt: new Date().toISOString() }
-    setChats((current) => {
-      const existing = current.find((chat) => chat.id === chatId)
-      if (!existing) {
-        return [{ id: chatId, title: text.slice(0, 48), createdAt: now, messages: [userMessage, assistantMessage] }, ...current]
-      }
-      return [
-        { ...existing, title: existing.messages.length ? existing.title : text.slice(0, 48), createdAt: now, messages: [...existing.messages, userMessage, assistantMessage] },
-        ...current.filter((chat) => chat.id !== chatId),
-      ]
-    })
+    const priorMessages = existing?.messages ?? []
+    const messages = retry ? priorMessages : [...priorMessages, userMessage]
+    const locationLabel = integration.selected?.feature.properties.h3_cell ?? search?.zipCode
+    setChats((current) => [{ ...existing, id: chatId, title: existing?.messages.length ? existing.title : text.slice(0, 48), createdAt: existing?.createdAt ?? now, messages, error: null, retryText: null }, ...current.filter((chat) => chat.id !== chatId)])
     setActiveChatId(chatId)
     setDraft('')
+    setPendingChatId(chatId)
+    try {
+      const selectedZone = context && integration.selected && integration.request ? {
+        h3_cell: integration.selected.feature.properties.h3_cell,
+        map_request: { business_type: integration.request.business_type, location: integration.request.location },
+      } : null
+      const response = await apiRequest('/agent/chat', { ...(context ?? {}), message: text,
+        ...(selectedZone ? { selected_zone: selectedZone } : {}),
+        ...(existing?.conversationId ? { conversation_id: existing.conversationId } : {}) })
+      setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat,
+        conversationId: response.conversation_id, contextKey,
+        messages: [...chat.messages, { id: createId(), role: 'assistant', content: response.response, createdAt: new Date().toISOString(), location: context ? locationLabel : null, queryIds: response.analyst_query_ids }],
+      } : chat))
+    } catch (error) {
+      setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat, error: error.message, retryText: text,
+        // Expired conversations require an explicit new thread; transport failures retain history.
+        conversationId: error.status === 409 ? null : existing?.conversationId, contextKey: null,
+      } : chat))
+    } finally { setPendingChatId(null) }
+  }
+
+  function sendMessage(event) {
+    event.preventDefault()
+    if (draft.trim().length <= 3000) submit(draft.trim())
   }
 
   return (
@@ -95,7 +123,9 @@ function ChatPage({ user, onBack }) {
               {activeChat.messages.map((item) => (
                 <article className={`chat-message ${item.role}`} key={item.id}>
                   <span className="chat-message-avatar">{item.role === 'user' ? (user?.email?.[0]?.toUpperCase() ?? 'Y') : 'W'}</span>
-                  <p>{item.content}</p>
+                  <div className="chat-message-content">{item.role === 'assistant' ? (
+                    <div className="chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} skipHtml>{item.content}</ReactMarkdown></div>
+                  ) : <p>{item.content}</p>}{(item.location || item.queryIds?.length > 0) && <small>{item.location && <>Location: {item.location} ? </>}{item.queryIds?.length > 0 && <>Snowflake queries: {item.queryIds.join(', ')}</>}</small>}</div>
                 </article>
               ))}
             </div>
@@ -112,11 +142,15 @@ function ChatPage({ user, onBack }) {
           )}
         </div>
         <div className="chat-compose-wrap">
+          {contextNote && <p role="status">{contextNote}</p>}
+          {context && <p>Current location: {integration.selected?.feature.properties.h3_cell ?? search?.zipCode} ? {search?.businessType}</p>}
+          {pendingChatId && pendingChatId === activeChatId && <p role="status">Cortex Agent is checking Snowflake metrics?</p>}
+          {activeChat?.error && <p role="alert">{activeChat.error} <button disabled={!!pendingChatId} onClick={() => submit(activeChat.retryText, true)}>Retry</button></p>}
           <form className="chat-compose" onSubmit={sendMessage}>
-            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
-            <button type="submit" disabled={!draft.trim()} aria-label="Send message">↑</button>
+            <textarea maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} placeholder="Message WayPoint" rows="1" aria-label="Message WayPoint" />
+            <button type="submit" disabled={!draft.trim() || !!pendingChatId} aria-label="Send message">↑</button>
           </form>
-          <p className="chat-compose-note">Chats are saved in this browser. Assistant responses are a preview.</p>
+          <p className="chat-compose-note">Chats are saved in this browser. Responses use the saved Snowflake Cortex Agent. Location metrics are attached only when verified.</p>
         </div>
       </section>
     </main>

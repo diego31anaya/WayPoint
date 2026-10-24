@@ -2,7 +2,7 @@
 
 BlockBoost turns mapped neighborhood businesses into evidence-grounded experiments for small-business owners. Snowflake supplies spatial analytics; a deterministic heuristic scores opportunity signals; Snowflake Cortex AI explains them and recommends strategies. A saved Cortex Agent with Cortex Analyst supports location comparisons over curated analytical data.
 
-**Status:** mock analysis works without credentials. Automated Snowflake/Cortex/Agent/H3 tests are mocked. Live `AI_COMPLETE`, live saved Agent calls, H3 SQL execution, installed dataset schema and genuine CoCo evidence remain unverified until the team supplies account access and artifacts. The configured model is `llama3.3-70b`; no Snowflake model has actually run in this environment.
+**Status:** the existing frontend has been verified against the live `WAYPOINT.PUBLIC.BUSINESS_ADVISOR` through FastAPI using the same Cortex Agent SDK connection as `test_agent.py`. A live answer and contextual follow-up used the same Snowflake conversation ID. General chat works independently of dashboard DATA_MODE. Radius analytics/H3 still require a verified canonical places view; the available SAMPLE_PLACES table has ID/LAT/LON fields and is not that canonical view. Direct AI_COMPLETE inference remains separately unverified.
 
 ## Start and test
 
@@ -23,7 +23,7 @@ Defaults: `DATA_MODE=mock`, `AI_ENABLED=false`, `AI_PROVIDER=snowflake_cortex`. 
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-Open http://127.0.0.1:8000/docs for executable API documentation and `/openapi.json` for the authoritative schema. The existing frontend was not changed. Backend CORS defaults to local Vite origins; server-side Streamlit HTTP calls also work. This trusted-local-demo MVP has no authentication or tenant isolation. Use account row-access controls and deployment authentication before serving multiple owners or exposing it publicly.
+Open http://127.0.0.1:8000/docs for executable API documentation and `/openapi.json` for the authoritative schema. The existing React frontend now uses these endpoints through the Vite /api proxy; see ../frontend/README.md. Backend CORS defaults to local Vite origins; server-side Streamlit HTTP calls also work. This trusted-local-demo MVP has no authentication or tenant isolation. Use account row-access controls and deployment authentication before serving multiple owners or exposing it publicly.
 
 ## Existing analysis contract
 
@@ -51,7 +51,7 @@ Recommendation cards retain title, description, reason, supporting_evidence, act
 | GET /api/health | Cheap liveness/configuration; opt-in `check_dependencies=true` checks places availability and Cortex model visibility, not inference success. Legacy ollama key is retained as `removed`. |
 | GET /api/categories | Stable category IDs, provisional dataset mappings, complements and goal suggestions. |
 | POST /api/analyze | Full analytics/scoring/recommendation pipeline. Invalid input 422, live data failure 503, model failure labeled fallback. |
-| POST /api/agent/chat | Saved Cortex Agent with verified warehouse context and real Analyst query references; unavailable setup 503, missing context 404, expired/mismatched conversation 409, rate limit 429. |
+| POST /api/agent/chat | Saved Cortex Agent SDK: general chat or verified selected-location context, durable Snowflake conversation IDs, query references when available; unavailable connection 503, missing context 404, expired context/conversation 409, rate limit 429. |
 | POST /api/opportunity-map | Bounded same-resolution H3 disk as GeoJSON FeatureCollection. Live query failure 503. Mock mode intentionally returns no H3 fixtures, explicitly labeled. |
 
 ## Snowflake places setup (A)
@@ -90,42 +90,49 @@ Independent live inference check (uses explicitly synthetic sample metrics; not 
 
 Exit 0 means validated live inference, 1 failed/fallback, 2 missing setup. In the current environment it reports BLOCKED, not verified.
 
-## Saved Agent and semantic view setup (A/B/admin)
+## Saved Agent connection
 
-1. Review `sql/cortex_setup.sql`: create the owned context table, analytical projection and semantic view. These statements are templates that require live account validation. The API never runs DDL or grants.
-2. Publish actual live analytics using the separate publisher role (INSERT/UPDATE required only for this explicit script):
+`app/services/cortex_agent_service.py` reuses `CortexAgentClient(account=..., auth=...)` from the working `test_agent.py`, with the pinned `snowflake-cortex-agent-sdk==0.0.3` dependency. Server Settings load the existing `.env`; `SNOWFLAKE_PAT` is supported directly, with the prior `SNOWFLAKE_AGENT_TOKEN` as a fallback. Tokens never enter VITE configuration or API responses.
 
-```powershell
-.\.venv\Scripts\python.exe -m scripts.publish_agent_context --business-id demo-owner --location-id pomona-a --latitude 34.0551 --longitude -117.7499 --business-type coffee_shop --radius-m 1500
-```
+The verified resources are `WAYPOINT.PUBLIC.BUSINESS_ADVISOR` and the `WAYPOINT.PUBLIC.BUSINESS_ANALYTICS` semantic view. Set `SNOWFLAKE_AGENT_DATABASE`, `SNOWFLAKE_AGENT_SCHEMA`, and `SNOWFLAKE_AGENT_NAME` to the agent's actual location. The backend verifies that a saved Analyst tool references the configured semantic view; additional configured tools, such as code_execution, are allowed. It does not rewrite the saved agent or use an inline agent.
 
-The script refuses mock mode and an unrecorded release, queries real places through the existing service, validates a StoredLocationContext, then uses a bound MERGE. Do not publish synthetic fixture metrics as real data. Use a single writer: standard-table primary keys are informational. Runtime rejects missing or duplicate contexts. Business IDs identify supplied owner context, not independently verified ownership.
-
-3. Install a saved `BLOCKBOOST.PUBLIC.BUSINESS_ADVISOR` using Snowsight or the documented CREATE AGENT/REST interface with `sql/business_advisor_spec.json`. Replace its warehouse placeholder. Its Analyst tool must be named neighborhood_analyst and reference the configured semantic view. Orchestration `auto` is Snowflake-selected and may be proprietary; it does not itself establish open-weight track eligibility.
-4. Give runtime read/usage access to context, analytical/semantic views, warehouse, Cortex/Analyst and saved agent. Verify current model RBAC and network/token policy with the account administrator. Do not use ACCOUNTADMIN as the API role. Spec verification requires the saved specification to be readable; secure/redacted specs fail closed.
-5. Set SNOWFLAKE_AGENT_DATABASE/SCHEMA/NAME, SNOWFLAKE_AGENT_TOOL_NAME, SNOWFLAKE_SEMANTIC_VIEW, SNOWFLAKE_CONTEXT_VIEW, HTTPS SNOWFLAKE_ACCOUNT_BASE_URL, SNOWFLAKE_AGENT_TOKEN and its token type server-side. Set SNOWFLAKE_AGENT_SETUP_VERIFIED=true only after setup. No tokens are returned to clients.
+General questions require only a message:
 
 ```json
-{
-  "message": "Why is this location recommended?",
-  "business_id": "demo-owner",
-  "location_id": "pomona-a",
-  "comparison_location_ids": [],
-  "conversation_id": null
-}
+{"message": "Which business categories have the highest reported closure rates?"}
 ```
 
-The server looks up actual analytical context, verifies the saved tool/semantic view configuration, creates a Snowflake thread and invokes the saved agent with Analyst required. It accepts only responses with a successful Analyst result/query reference. It returns supporting_metrics (provided-context evidence, not a claim that every metric was cited), analyst_query_ids, relevant_location_ids and source metadata. Tool warnings or unsupported numerical claims cause a controlled error, not an ungrounded answer.
+The response returns the actual Snowflake conversation ID as a string. Follow-ups send that same `conversation_id`. The SDK uses `conversations.attach(id, agent=saved_agent)` and `conversation.send(message, agent=saved_agent)` explicitly, so an attachment cannot silently switch to an inline agent. Snowflake stores history; server restarts no longer discard conversation mappings. The backend only keeps in-flight locks and a bounded cache of verified location snapshots. `New chat` omits the ID and creates a new conversation; old chats remain available in the existing sidebar.
 
-Send the opaque returned conversation_id and the same business/location set for follow-ups. Snowflake receives the persisted thread ID and last assistant message ID. Server state is bounded, locked and expires after 30 minutes; restart/worker change loses local tokens, requiring a new conversation. This demo should use one API worker. Runs are not automatically retried because a timeout can still persist a turn. Do not automatically retry a failed chat turn. For durable/multi-user hosting, add authorized session persistence and row-access policies; prompt filters do not enforce tenant security.
+General advice and clarification questions do not require an Analyst query. Statistical questions are instructed to use the saved semantic view. Query IDs from actual tool/table results are returned and displayed; no placeholder reply is substituted on failure. Source-reported closure rates are distinguished from predicted survival; demographics are used only if the tools can establish relevant data and geography. Prose remains model generated and is not a mathematical proof of every claim.
 
-Agent live check is separate:
+### Selected location context
+
+Live `/api/analyze` registers its exact already-computed request, metrics and marker subset in a bounded one-hour server cache, returning additive `agent_context` IDs. It requires `DATA_MODE=live`, verified places mapping, and a recorded dataset release. No analytical snapshot is recomputed or published by the API; INSERT/UPDATE grants and the old context table are no longer prerequisites for chat. Failed registration leaves analysis available with a warning. Mock analysis never registers or sends synthetic values as facts.
+
+Chat can attach these business/location IDs, or submit `business_information` in the existing AnalysisRequest shape to calculate a fresh verified live analysis. Client-supplied metrics are rejected. Pre-published warehouse contexts remain supported for compatibility through a bound lookup and StoredLocationContext validation; the standalone publisher is optional.
+
+When a heatmap zone is selected, the frontend also sends its H3 ID and original map request. The backend queries the live map again, verifies membership, category, source and the selected analysis center, then attaches the full-cell counts/density/score separately from the radius metrics. Missing demographics stay null. Selecting a different location preserves the Snowflake conversation while replacing current-location context on the next turn. Expired analysis snapshots require reanalysis rather than accepting stale client metrics.
+
+The currently available account tables include SAMPLE_PLACES, CATEGORY_SURVIVAL, DEMOGRAPHICS and LA_CBG. Their presence is not proof of a verified radius or H3 mapping; no schema creation, grants or dataset assumptions were performed by this integration. General agent questions can use the configured semantic view immediately.
+
+### Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m scripts.check_cortex --component agent --business-id demo-owner --location-id pomona-a
+python -m pytest -q
+# Explicitly calls the real agent twice and checks the same Snowflake conversation.
+python -m scripts.check_cortex --component agent
 ```
 
-Implementation uses the documented [saved Agent Run REST API](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run) with stream=false and [Snowflake threads](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-threads-rest-api), via existing HTTPX. No extra SDK dependency or invented Agent object is used.
+To test through the existing browser UI, start the backend on port 8000 and Vite on 5173, then from `frontend`:
+
+```powershell
+$env:LIVE_AGENT_TESTS='1'
+$env:LIVE_BASE_URL='http://127.0.0.1:5173'
+npx playwright test tests/live-agent.spec.js
+```
+
+The ordinary browser suite skips live calls unless explicitly enabled. See `docs/verification.md` for actual results and remaining analytics setup. The existing local email session is a demo, not a tenant authentication boundary.
 
 ## H3 opportunity map
 

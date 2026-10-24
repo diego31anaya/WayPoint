@@ -6,6 +6,7 @@ import ChatNavButton from '../components/ChatNavButton'
 import { fetchZipBoundary } from '../services/zipBoundary'
 import { CATEGORY_LABELS, dataRadius, fetchDataIndex, fetchZipData, matchCategory } from '../services/zipData'
 import './NeighborhoodScreen.css'
+import AnalysisResults from '../components/AnalysisResults'
 
 const MILE_M = 1609.34
 const percent = (rate) => `${(rate * 100).toFixed(1)}%`
@@ -300,7 +301,7 @@ function NeighborhoodInsights({ search, category, zipResult, index }) {
   )
 }
 
-function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation }) {
+function StaticNeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation }) {
   const category = matchCategory(search.businessType)
   const [loaded, setLoaded] = useState({ zip: null, status: 'loading', data: null })
   const [index, setIndex] = useState(null)
@@ -385,4 +386,19 @@ function NeighborhoodScreen({ search, user, onBack, onCreateAccount, onOpenDashb
   )
 }
 
-export default NeighborhoodScreen
+export default function NeighborhoodScreen(props) {
+  if (import.meta.env.VITE_STATIC_DEMO === 'true') return <><p role="status">STATIC SNAPSHOT DEMO - exported data, not live Snowflake. Chat uses the separately requested backend analysis.</p><StaticNeighborhoodScreen {...props} /></>
+  const { search, user, onBack, onCreateAccount, onOpenDashboard, onOpenChat, locationSaved, onSaveLocation, onRemoveLocation, integration } = props
+  return <main className="neighborhood-screen">
+    <header className="site-header page-shell">
+      <a className="brand" href="#home" onClick={(event) => { event.preventDefault(); onBack() }}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>WayPoint</span></a>
+      <div className="map-header-actions"><button className="back-home" onClick={onBack}>Edit search</button>{user && <ChatNavButton onClick={onOpenChat} />}<AccountControl user={user} onCreateAccount={onCreateAccount} onOpenDashboard={onOpenDashboard} /></div>
+    </header>
+    <section className="neighborhood-content page-shell">
+      <div className="neighborhood-heading"><div className="eyebrow">NEIGHBORHOOD EXPLORER</div><h1>Explore <em>{search.zipCode}</em></h1><p><strong>{search.businessType}</strong> - Within {search.radiusMiles} miles</p>
+        <button className={`save-location-button${locationSaved ? ' is-saved' : ''}`} onClick={user ? (locationSaved ? onRemoveLocation : onSaveLocation) : onCreateAccount}>{user ? (locationSaved ? 'Saved to your locations' : 'Save this location') : 'Create account to save this location'}</button>
+      </div>
+      <AnalysisResults integration={integration} />
+    </section>
+  </main>
+}

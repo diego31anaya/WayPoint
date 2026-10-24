@@ -9,6 +9,7 @@ import { buildBrief, fetchDataIndex, fetchZipData } from './services/zipData'
 import { useAuth } from './context/useAuth'
 import { savedLocationId } from './services/savedLocations'
 import './App.css'
+import { useAnalysis } from './services/useAnalysis'
 
 // Home page example: Pomona, next to Cal Poly Pomona.
 const FEATURED_ZIP = '91768'
@@ -87,6 +88,7 @@ function App() {
   const [radius, setRadius] = useState('3')
   const [message, setMessage] = useState('')
   const [activeSearch, setActiveSearch] = useState(null)
+  const integration = useAnalysis(activeSearch)
   const [currentPage, setCurrentPage] = useState('home')
   const [returnPage, setReturnPage] = useState('home')
   const [brief, setBrief] = useState(null)
@@ -131,8 +133,8 @@ function App() {
       setMessage('Enter a 5-digit ZIP code to get started.')
       return
     }
-    if (!radius || Number(radius) <= 0) {
-      setMessage('Enter a radius greater than 0 miles.')
+    if (!radius || Number(radius) < 0.1 || Number(radius) > 3.1) {
+      setMessage('Enter a radius between 0.1 and 3.1 miles.')
       return
     }
     setMessage('')
@@ -144,6 +146,7 @@ function App() {
     setCurrentPage('neighborhood')
   }
 
+  function renderPage() {
   if (currentPage === 'account') {
     return (
       <AccountPage
@@ -156,14 +159,13 @@ function App() {
     )
   }
 
-  if (currentPage === 'chat' && currentUser) {
-    return <ChatPage user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} />
-  }
+  if (currentPage === 'chat' && currentUser) return null
 
   if (currentPage === 'dashboard') {
     return (
       <>
         <DashboardPage
+          integration={integration}
           user={currentUser}
           activeSearch={activeSearch}
           savedLocations={savedLocations}
@@ -185,6 +187,7 @@ function App() {
     return (
       <>
         <NeighborhoodScreen
+          integration={integration}
           search={activeSearch}
           user={currentUser}
           onBack={() => setCurrentPage('home')}
@@ -251,7 +254,7 @@ function App() {
               <label className="form-field radius-field" htmlFor="radius">
                 <span>Within</span>
                 <span className="radius-input-wrap">
-                  <input id="radius" type="number" min="0.5" max="50" step="0.5" value={radius} onChange={(event) => setRadius(event.target.value)} />
+                  <input id="radius" type="number" min="0.1" max="3.1" step="0.1" value={radius} onChange={(event) => setRadius(event.target.value)} />
                   <span className="miles-suffix">mi</span>
                 </span>
               </label>
@@ -325,6 +328,9 @@ function App() {
       </main>
     </>
   )
+  }
+  return <>{renderPage()}{currentUser && <div hidden={currentPage !== 'chat'}><ChatPage key={currentUser.email} integration={integration} search={activeSearch} user={currentUser} onBack={() => setCurrentPage(chatReturnPage)} /></div>}</>
+
 }
 
 export default App

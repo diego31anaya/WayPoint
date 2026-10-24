@@ -11,7 +11,7 @@ flowchart LR
     Validate --> UI
     API --> Grid[Snowflake H3 aggregates and deterministic SQL score]
     Grid --> UI
-    API --> Context[Verified curated analytical context]
+    API --> Context[Optional verified location snapshot]
     Context --> Agent[Saved Cortex Agent and Snowflake thread]
     Agent --> Analyst[Cortex Analyst semantic view]
     Analyst --> Agent
@@ -23,7 +23,9 @@ flowchart LR
 
 Location summaries and score explanations are optional additions to analyze, separately sourced and never model-calculated statistics. All population/survival fields are null until a verified dataset/model is genuinely integrated. Mock data and fallback sources are independent: a real remote model can process explicitly synthetic records without making them real Snowflake observations.
 
-The separate data-lead publisher loads real analysis snapshots into the owned context table; runtime never writes analytical data. The semantic view projects these snapshots into governed facts and metrics. Saved-Agent configuration is verified before each turn. Threads use Snowflake's last assistant-message ID; browser clients receive only an opaque process-local conversation token. The trusted-local MVP has no auth and is not a tenant-security boundary.
+The working Cortex Agent SDK connection uses WAYPOINT.PUBLIC.BUSINESS_ADVISOR and its WAYPOINT.PUBLIC.BUSINESS_ANALYTICS Analyst tool. Additional saved tools are preserved. General questions do not depend on an analysis, global dashboard mock mode or a context table. The SDK creates a conversation or attaches to the actual Snowflake ID, always explicitly passing the saved data-agent specification. Snowflake stores conversation history; the API uses only in-flight locks and does not map remote IDs to process-local tokens.
+
+Live analyses register their already-calculated metrics and marker subset in a bounded one-hour cache. The browser sends opaque references, never trusted metric values. The agent receives the current verified snapshot, while selection of an H3 zone triggers source, membership, business-category and center validation against a fresh live map query. Full-cell and circular radius metrics remain distinct, and missing demographics are null. Pre-published context lookup remains an optional compatibility path; the API no longer requires table writes. This trusted-local MVP has no tenant authentication boundary.
 
 H3 cells originate from a fixed-resolution disk, not business presence. Geographic SQL aggregates into full cells, measures their area and mirrors the existing score formula. Empty cells are retained without scores. Heatmaps never trigger cell-by-cell inference.
 

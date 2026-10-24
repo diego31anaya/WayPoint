@@ -13,6 +13,12 @@ def publish_context(settings, request, business_id, location_id, connect=None):
     _, metrics = service.analyze(request)
     context = StoredLocationContext(business_information=request, metrics=metrics,
         data_source='snowflake', dataset_release=settings.dataset_release)
+    store_context(settings, service, context, business_id, location_id)
+    return context
+
+
+def store_context(settings, service, context, business_id, location_id):
+    """Publish already calculated metrics without taking a second data snapshot."""
     table = '.'.join(identifier(v) for v in [settings.snowflake_agent_database, settings.snowflake_agent_schema, settings.snowflake_context_view])
     with closing(service._connection()) as connection, closing(connection.cursor()) as cursor:
         cursor.execute(f'''MERGE INTO {table} target USING
@@ -23,7 +29,6 @@ def publish_context(settings, request, business_id, location_id, connect=None):
             VALUES (source.BUSINESS_ID, source.LOCATION_ID, source.CONTEXT)''',
             (business_id, location_id, context.model_dump_json()))
         connection.commit()
-    return context
 
 
 def main():
