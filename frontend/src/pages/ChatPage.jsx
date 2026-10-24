@@ -143,7 +143,7 @@ function ChatPage({ user, onBack, integration, search }) {
         </div>
         <div className="chat-compose-wrap">
           {contextNote && <p role="status">{contextNote}</p>}
-          {context && <p>Current location: {integration.selected?.feature.properties.h3_cell ?? integration.locationLabel ?? search?.zipCode} ? {search?.businessType}</p>}
+          {context && <p>Current location: {integration.selected?.feature.properties.h3_cell ?? integration.locationLabel ?? search?.zipCode} · {search?.businessType}</p>}
           {pendingChatId && pendingChatId === activeChatId && <p role="status">Cortex Agent is checking Snowflake metrics?</p>}
           {activeChat?.error && <p role="alert">{activeChat.error} <button disabled={!!pendingChatId} onClick={() => submit(activeChat.retryText, true)}>Retry</button></p>}
           <form className="chat-compose" onSubmit={sendMessage}>
