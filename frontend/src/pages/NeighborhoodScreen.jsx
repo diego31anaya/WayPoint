@@ -584,11 +584,7 @@ function StrategiesSection({ search, category, zipData }) {
     )
   }
   return (
-    <section className="strategies-section" aria-label="Experiments to test">
-      <div className="eyebrow">PLAN A TEST</div>
-      <h2>Low-cost experiments to try <em>next</em></h2>
-      {body}
-    </section>
+    <></>
   )
 }
 
